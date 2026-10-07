@@ -14,21 +14,29 @@ export type ExpenseCategory =
   | 'Subscription' 
   | 'Other';
 
-export interface SampleExpense {
+export type PaymentMethod =
+  | 'Cash'
+  | 'UPI'
+  | 'Debit Card'
+  | 'Credit Card'
+  | 'Bank Transfer'
+  | 'Other';
+
+export interface Expense {
   id: string;
+  amountInPaise: number;
   category: ExpenseCategory;
-  amount: number;
-  date: string;
-  isToday?: boolean;
-  paymentMethod: string;
+  paymentMethod: PaymentMethod;
+  date: string; // YYYY-MM-DD, local calendar date
   note: string;
-  iconType: 'food' | 'travel' | 'coffee' | 'bills' | 'shopping' | 'rent' | 'entertainment';
+  currency: 'INR';
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
 }
 
 export interface MonthData {
-  id: string; // '2026-10', '2026-09', '2026-08'
-  label: string; // 'October 2026'
-  shortLabel: string; // 'Oct 2026'
+  id: string; // 'YYYY-MM'
+  label: string; // e.g. 'October 2026'
+  shortLabel: string; // e.g. 'Oct 2026'
   isCurrentMonth: boolean;
-  expenses: SampleExpense[];
 }

@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Tab } from './types';
-import { SAMPLE_MONTHS } from './sampleData';
+import { INITIAL_MONTHS } from './sampleData';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './components/HomeView';
 import { AddExpenseView } from './components/AddExpenseView';
 import { PlaceholderView } from './components/PlaceholderView';
 import { EditFinancialModal } from './components/EditFinancialModal';
+import { expenseRepository } from './repositories/expenseRepository';
+import { getLocalCurrentMonthId } from './utils/finance';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('home');
-  const [selectedMonthId, setSelectedMonthId] = useState<string>('2026-10');
+  // Dynamically initialize to current local client month (no hardcoded '2026-10')
+  const [selectedMonthId, setSelectedMonthId] = useState<string>(getLocalCurrentMonthId);
 
   // Pure in-memory financial setup state (resets on page refresh, no persistence)
   const [monthlyIncome, setMonthlyIncome] = useState<number | null>(null);
@@ -18,6 +22,13 @@ export const App: React.FC = () => {
 
   // Modal editor state for income and budget
   const [editingType, setEditingType] = useState<'income' | 'budget' | null>(null);
+
+  // Live query for expenses in the selected month via repository abstraction
+  const liveExpenses = useLiveQuery(
+    () => expenseRepository.getExpensesByMonth(selectedMonthId),
+    [selectedMonthId]
+  );
+  const expenses = liveExpenses ?? [];
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
@@ -46,10 +57,11 @@ export const App: React.FC = () => {
         <main className="content-area">
           {activeTab === 'home' && (
             <HomeView
-              months={SAMPLE_MONTHS}
+              months={INITIAL_MONTHS}
               selectedMonthId={selectedMonthId}
               monthlyIncome={monthlyIncome}
               monthlyBudget={monthlyBudget}
+              expenses={expenses}
               onSelectMonth={setSelectedMonthId}
               onOpenEditIncome={() => setEditingType('income')}
               onOpenEditBudget={() => setEditingType('budget')}
@@ -59,7 +71,10 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'add' && (
-            <AddExpenseView onCancel={() => handleTabChange('home')} />
+            <AddExpenseView
+              onCancel={() => handleTabChange('home')}
+              onExpenseAdded={() => handleTabChange('home')}
+            />
           )}
 
           {(activeTab === 'expenses' || activeTab === 'budgets' || activeTab === 'more') && (

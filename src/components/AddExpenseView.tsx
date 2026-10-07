@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
-import { ExpenseCategory } from '../types';
+import { Expense, ExpenseCategory, PaymentMethod } from '../types';
+import { expenseRepository } from '../repositories/expenseRepository';
+import {
+  rupeesToPaise,
+  MAX_AMOUNT_RUPEES,
+  MAX_AMOUNT_PAISE,
+  getLocalTodayDateString,
+} from '../utils/finance';
 
 interface AddExpenseViewProps {
   onCancel: () => void;
+  onExpenseAdded?: () => void;
 }
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -20,7 +28,7 @@ const CATEGORIES: ExpenseCategory[] = [
   'Other',
 ];
 
-const PAYMENT_METHODS = [
+const PAYMENT_METHODS: PaymentMethod[] = [
   'Cash',
   'UPI',
   'Debit Card',
@@ -29,28 +37,19 @@ const PAYMENT_METHODS = [
   'Other',
 ];
 
-// Maximum amount: ₹10,00,000 (10 Lakh)
-const MAX_AMOUNT = 1000000;
-
-// Helper to get local client date in YYYY-MM-DD format
-const getTodayDateString = (): string => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel }) => {
+export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel, onExpenseAdded }) => {
   // Amount MUST start completely empty for a new expense (no hardcoded ₹250 or demo value)
   const [amount, setAmount] = useState<string>('');
   const [amountError, setAmountError] = useState<string | null>(null);
 
   const [selectedCategory, setSelectedCategory] = useState<ExpenseCategory>('Food');
-  const [selectedPayment, setSelectedPayment] = useState<string>('UPI');
-  // Initialized dynamically from actual current client date
-  const [date, setDate] = useState<string>(getTodayDateString);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('UPI');
+  // Initialized dynamically from actual current local client date
+  const [date, setDate] = useState<string>(getLocalTodayDateString);
   const [note, setNote] = useState<string>('');
+
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value;
@@ -84,7 +83,6 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel }) => {
     }
 
     // 5. Hard ceiling on integer digits: MAX_AMOUNT (10,00,000) has 7 digits
-    // Prevents entering unlimited characters
     const integerPart = raw.split('.')[0] || '';
     if (integerPart.length > 7) {
       setAmountError('Maximum amount is ₹10,00,000');
@@ -94,7 +92,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel }) => {
 
     // 6. Maximum amount enforcement: ₹10,00,000 (10 lakh)
     const numVal = parseFloat(raw);
-    if (!isNaN(numVal) && numVal > MAX_AMOUNT) {
+    if (!isNaN(numVal) && numVal > MAX_AMOUNT_RUPEES) {
       setAmountError('Maximum amount is ₹10,00,000');
       e.target.value = amount;
       return;
@@ -108,6 +106,58 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel }) => {
     }
 
     setAmount(raw);
+  };
+
+  const amountPaise = rupeesToPaise(amount);
+  const isFormValid =
+    amount.trim() !== '' &&
+    amountError === null &&
+    amountPaise > 0 &&
+    amountPaise <= MAX_AMOUNT_PAISE &&
+    date.trim() !== '';
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isFormValid || isSaving) return;
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const trimmedNote = note.trim().slice(0, 120);
+      const nowIso = new Date().toISOString();
+
+      const newExpense: Expense = {
+        id: crypto.randomUUID(),
+        amountInPaise: amountPaise,
+        category: selectedCategory,
+        paymentMethod: selectedPayment,
+        date: date.trim(),
+        note: trimmedNote,
+        currency: 'INR',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      await expenseRepository.addExpense(newExpense);
+
+      // Reset form
+      setAmount('');
+      setNote('');
+      setDate(getLocalTodayDateString());
+      setSelectedCategory('Food');
+      setSelectedPayment('UPI');
+
+      // Notify parent & return to Home
+      if (onExpenseAdded) {
+        onExpenseAdded();
+      }
+      onCancel();
+    } catch (err) {
+      console.error('Failed to save expense to IndexedDB:', err);
+      setSaveError('Unable to save expense to local storage. Please try again.');
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -128,7 +178,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel }) => {
         <div className="header-placeholder" />
       </div>
 
-      <form className="add-expense-form" onSubmit={(e) => e.preventDefault()}>
+      <form className="add-expense-form" onSubmit={handleSubmit}>
         {/* Prominent Amount Input Card */}
         <div className={`amount-input-card ${amountError ? 'has-error' : ''}`}>
           <label htmlFor="expense-amount" className="form-label text-center">Amount</label>
@@ -200,30 +250,28 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel }) => {
           </div>
         </div>
 
-        {/* Optional Note Field */}
+        {/* Optional Note Field (Max 120 chars) */}
         <div className="form-group">
-          <label htmlFor="expense-note" className="form-label">Optional Note</label>
+          <label htmlFor="expense-note" className="form-label">
+            Optional Note <span className="char-count">({note.length}/120)</span>
+          </label>
           <input
             id="expense-note"
             type="text"
             className="form-input"
             placeholder="Add details (e.g. Metro pass, Lunch)"
+            maxLength={120}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
         </div>
 
-        {/* Informational Stage Banner */}
-        <div className="stage-info-box" role="status">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          <p>
-            <strong>Stage 2 UI Shell:</strong> Data persistence and storage will be implemented in Stage 3.
-          </p>
-        </div>
+        {/* Save Error Notice */}
+        {saveError && (
+          <div className="save-error-box" role="alert">
+            <p>{saveError}</p>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="form-actions-row">
@@ -231,17 +279,17 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel }) => {
             type="button"
             className="btn-secondary"
             onClick={onCancel}
+            disabled={isSaving}
           >
             Cancel
           </button>
 
           <button
-            type="button"
-            className="btn-primary-disabled"
-            disabled
-            title="Saving will be activated in Stage 3"
+            type="submit"
+            className="btn-primary"
+            disabled={!isFormValid || isSaving}
           >
-            Save (Stage 3)
+            {isSaving ? 'Saving...' : 'Save Expense'}
           </button>
         </div>
       </form>

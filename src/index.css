@@ -43,8 +43,19 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
-  user-select: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Scope non-selection to interactive controls only */
+button,
+.nav-item,
+.category-chip,
+.payment-chip,
+.btn-primary-add,
+.btn-empty-add,
+.month-nav-btn {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* App Shell Layout */
@@ -686,6 +697,11 @@ html, body {
 .expense-icon-box.shopping { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
 .expense-icon-box.rent { background: rgba(16, 185, 129, 0.15); color: #34d399; }
 .expense-icon-box.entertainment { background: rgba(147, 51, 234, 0.15); color: #c084fc; }
+.expense-icon-box.medical { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.expense-icon-box.family { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.expense-icon-box.loan { background: rgba(234, 179, 8, 0.15); color: #facc15; }
+.expense-icon-box.subscription { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+.expense-icon-box.other { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
 
 .expense-details {
   flex: 1;
@@ -966,6 +982,34 @@ html, body {
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.btn-primary {
+  padding: 13px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.4);
+}
+
+.btn-primary:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .btn-primary-disabled {
