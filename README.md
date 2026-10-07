@@ -6,15 +6,17 @@
 
 ## Current Stage
 
-**Stage 3: Local-First Expense Storage (Dexie.js / IndexedDB)**
+**Stage 4: Persistent Monthly Income & Budget (Dexie.js / IndexedDB)**
 - High-fidelity mobile dashboard with **HK** branding and **finance-tracker** subtitle.
 - Local-first IndexedDB persistence powered by Dexie.js with zero network dependencies.
-- Clean repository abstraction layer (`expenseRepository`) isolating storage from UI components.
-- Exact monetary arithmetic stored in integer paise (`amountInPaise`) to prevent floating-point errors.
+- Persistent Monthly Income and Monthly Budget surviving page reloads and browser restarts.
+- Clean repository abstraction layers (`expenseRepository`, `financialSettingsRepository`) isolating storage from UI components.
+- Exact monetary arithmetic stored in integer paise (`amountInPaise`, `incomeInPaise`, `budgetInPaise`) to prevent floating-point errors.
 - Real-time reactivity via `dexie-react-hooks` (`useLiveQuery`).
-- Dynamic client local date and rolling month selection (no UTC drift).
-- Validated Add Expense workflow with controlled amount input, categories, payment methods, and notes.
-- Real expense list on Home with dynamic Monthly Spending, Today's Spending, and Remaining Budget.
+- Non-destructive Dexie version upgrade (`version(2)`) ensuring existing expenses remain intact.
+- Dynamic client local date and rolling month selection (no UTC drift) with full month isolation.
+- Validated Edit Income & Budget modal with decimal support, boundary validation, and automatic paise conversion.
+- Dynamic Home view calculations for Monthly Spending, Today's Spending, and Remaining Budget (`budgetInPaise - totalSpendingPaise`) with over-budget indicators.
 - Root-level Error Boundary and full offline PWA caching.
 
 ---
@@ -63,6 +65,6 @@ npm run preview
 ## Project Roadmap
 - [x] **Stage 1**: Foundation & PWA setup
 - [x] **Stage 2**: Mobile Finance-Tracker UI Shell (Static Placeholders)
-- [x] **Stage 3**: Local-First Data Layer (Dexie.js / IndexedDB) & Working Expense Form
-- [ ] **Stage 4**: Daily & Monthly Grouped Expense Views
-- [ ] **Stage 5**: FastAPI Backend & Cloud Database Sync Engine
+- [x] **Stage 3**: Local-First Expense Storage (Dexie.js / IndexedDB)
+- [x] **Stage 4**: Persistent Monthly Income & Budget
+- [ ] **Stage 5**: Grouped Expense Views & Category Analytics
