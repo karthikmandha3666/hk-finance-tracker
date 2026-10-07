@@ -6,13 +6,16 @@
 
 ## Current Stage
 
-**Stage 2: Mobile Finance-Tracker UI Shell (Static Preview)**
-- High-fidelity mobile dashboard shell with **HK** branding and **finance-tracker** subtitle.
-- Financial overview metrics: Monthly Total Spending, Income, and Remaining Budget cards.
-- Static sample transaction feed with category-coded icons.
-- Add Expense view with quick category chips, date picker, payment method selector, and note field.
-- Mobile bottom navigation bar (Home, Expenses, Add, Budgets, More) with tab routing.
-- Pure UI demonstration shell (Zero database, zero Dexie/IndexedDB, zero backend API, zero persistence).
+**Stage 3: Local-First Expense Storage (Dexie.js / IndexedDB)**
+- High-fidelity mobile dashboard with **HK** branding and **finance-tracker** subtitle.
+- Local-first IndexedDB persistence powered by Dexie.js with zero network dependencies.
+- Clean repository abstraction layer (`expenseRepository`) isolating storage from UI components.
+- Exact monetary arithmetic stored in integer paise (`amountInPaise`) to prevent floating-point errors.
+- Real-time reactivity via `dexie-react-hooks` (`useLiveQuery`).
+- Dynamic client local date and rolling month selection (no UTC drift).
+- Validated Add Expense workflow with controlled amount input, categories, payment methods, and notes.
+- Real expense list on Home with dynamic Monthly Spending, Today's Spending, and Remaining Budget.
+- Root-level Error Boundary and full offline PWA caching.
 
 ---
 
@@ -20,6 +23,7 @@
 
 - **Framework**: React 19
 - **Language**: TypeScript 5.7+
+- **Local Database**: Dexie.js (IndexedDB wrapper) & `dexie-react-hooks`
 - **Build Tool**: Vite 6
 - **PWA Tooling**: `vite-plugin-pwa` (Workbox)
 - **Styling**: Modern Vanilla CSS (Mobile-first responsive design, safe-area insets, accessible contrast)
@@ -59,6 +63,6 @@ npm run preview
 ## Project Roadmap
 - [x] **Stage 1**: Foundation & PWA setup
 - [x] **Stage 2**: Mobile Finance-Tracker UI Shell (Static Placeholders)
-- [ ] **Stage 3**: Local-First Data Layer (Dexie.js / IndexedDB) & Working Expense Form
+- [x] **Stage 3**: Local-First Data Layer (Dexie.js / IndexedDB) & Working Expense Form
 - [ ] **Stage 4**: Daily & Monthly Grouped Expense Views
 - [ ] **Stage 5**: FastAPI Backend & Cloud Database Sync Engine
