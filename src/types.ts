@@ -40,3 +40,12 @@ export interface MonthData {
   shortLabel: string; // e.g. 'Oct 2026'
   isCurrentMonth: boolean;
 }
+
+export interface MonthlySettings {
+  id: string;
+  monthId: string; // 'YYYY-MM' (e.g. '2026-10')
+  incomeInPaise: number | null;
+  budgetInPaise: number | null;
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}

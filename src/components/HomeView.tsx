@@ -11,8 +11,8 @@ import {
 export interface HomeViewProps {
   months: MonthData[];
   selectedMonthId: string;
-  monthlyIncome: number | null;
-  monthlyBudget: number | null;
+  monthlyIncomePaise: number | null;
+  monthlyBudgetPaise: number | null;
   expenses: Expense[];
   onSelectMonth: (monthId: string) => void;
   onOpenEditIncome: () => void;
@@ -135,8 +135,8 @@ const renderCategoryIcon = (cat: ExpenseCategory): React.ReactNode => {
 export const HomeView: React.FC<HomeViewProps> = ({
   months,
   selectedMonthId,
-  monthlyIncome,
-  monthlyBudget,
+  monthlyIncomePaise,
+  monthlyBudgetPaise,
   expenses,
   onSelectMonth,
   onOpenEditIncome,
@@ -160,16 +160,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const localTodayStr = getLocalTodayDateString();
   const todaySpendingPaise = calculateTodaySpending(expenses, localTodayStr);
 
-  // In-memory budget calculations
-  const hasBudget = monthlyBudget !== null && monthlyBudget > 0;
-  const monthlyBudgetPaise = hasBudget ? monthlyBudget * 100 : null;
+  // Persistent budget calculations (integer paise)
+  const hasBudget = monthlyBudgetPaise !== null && monthlyBudgetPaise > 0;
   const remainingBudgetPaise =
-    monthlyBudgetPaise !== null ? monthlyBudgetPaise - totalSpendingPaise : null;
+    hasBudget ? monthlyBudgetPaise - totalSpendingPaise : null;
   const isOverBudget = remainingBudgetPaise !== null && remainingBudgetPaise < 0;
 
   // Percentage spent
   const budgetSpentPercent =
-    monthlyBudgetPaise !== null && monthlyBudgetPaise > 0
+    hasBudget && monthlyBudgetPaise > 0
       ? Math.min(100, Math.round((totalSpendingPaise / monthlyBudgetPaise) * 100))
       : null;
 
@@ -239,11 +238,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </section>
 
-      {/* Financial Setup & Planning Section (Editable In-Memory Income & Budget) */}
+      {/* Financial Setup & Planning Section (Persistent Income & Budget) */}
       <section className="financial-planning-section">
         <div className="planning-header">
           <span className="planning-title">Financial Setup</span>
-          <span className="planning-badge">Interactive State</span>
+          <span className="planning-badge">Monthly</span>
         </div>
 
         <div className="planning-cards-grid">
@@ -265,10 +264,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </button>
             </div>
 
-            {monthlyIncome !== null ? (
+            {monthlyIncomePaise !== null ? (
               <div className="planning-value text-emerald">
                 <span className="currency-symbol-sm">₹</span>
-                <span>{monthlyIncome.toLocaleString('en-IN')}</span>
+                <span>{formatPaiseToRupees(monthlyIncomePaise)}</span>
               </div>
             ) : (
               <button
@@ -299,10 +298,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </button>
             </div>
 
-            {monthlyBudget !== null ? (
+            {monthlyBudgetPaise !== null ? (
               <div className="planning-value text-cyan">
                 <span className="currency-symbol-sm">₹</span>
-                <span>{monthlyBudget.toLocaleString('en-IN')}</span>
+                <span>{formatPaiseToRupees(monthlyBudgetPaise)}</span>
               </div>
             ) : (
               <button

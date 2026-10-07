@@ -9,16 +9,13 @@ import { AddExpenseView } from './components/AddExpenseView';
 import { PlaceholderView } from './components/PlaceholderView';
 import { EditFinancialModal } from './components/EditFinancialModal';
 import { expenseRepository } from './repositories/expenseRepository';
+import { financialSettingsRepository } from './repositories/financialSettingsRepository';
 import { getLocalCurrentMonthId } from './utils/finance';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   // Dynamically initialize to current local client month (no hardcoded '2026-10')
   const [selectedMonthId, setSelectedMonthId] = useState<string>(getLocalCurrentMonthId);
-
-  // Pure in-memory financial setup state (resets on page refresh, no persistence)
-  const [monthlyIncome, setMonthlyIncome] = useState<number | null>(null);
-  const [monthlyBudget, setMonthlyBudget] = useState<number | null>(null);
 
   // Modal editor state for income and budget
   const [editingType, setEditingType] = useState<'income' | 'budget' | null>(null);
@@ -30,16 +27,24 @@ export const App: React.FC = () => {
   );
   const expenses = liveExpenses ?? [];
 
+  // Live query for financial settings in the selected month via repository abstraction
+  const currentSettings = useLiveQuery(
+    () => financialSettingsRepository.getMonthlySettings(selectedMonthId),
+    [selectedMonthId]
+  );
+  const monthlyIncomePaise = currentSettings?.incomeInPaise ?? null;
+  const monthlyBudgetPaise = currentSettings?.budgetInPaise ?? null;
+
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSaveFinancialValue = (val: number | null) => {
+  const handleSaveFinancialValue = async (valInPaise: number | null) => {
     if (editingType === 'income') {
-      setMonthlyIncome(val);
+      await financialSettingsRepository.updateMonthlyIncome(selectedMonthId, valInPaise);
     } else if (editingType === 'budget') {
-      setMonthlyBudget(val);
+      await financialSettingsRepository.updateMonthlyBudget(selectedMonthId, valInPaise);
     }
   };
 
@@ -59,8 +64,8 @@ export const App: React.FC = () => {
             <HomeView
               months={INITIAL_MONTHS}
               selectedMonthId={selectedMonthId}
-              monthlyIncome={monthlyIncome}
-              monthlyBudget={monthlyBudget}
+              monthlyIncomePaise={monthlyIncomePaise}
+              monthlyBudgetPaise={monthlyBudgetPaise}
               expenses={expenses}
               onSelectMonth={setSelectedMonthId}
               onOpenEditIncome={() => setEditingType('income')}
@@ -91,11 +96,11 @@ export const App: React.FC = () => {
           onTabChange={handleTabChange}
         />
 
-        {/* In-Memory Income & Budget Edit Modal */}
+        {/* Persistent Income & Budget Edit Modal */}
         <EditFinancialModal
           isOpen={editingType !== null}
           type={editingType || 'income'}
-          currentValue={editingType === 'income' ? monthlyIncome : monthlyBudget}
+          currentValueInPaise={editingType === 'income' ? monthlyIncomePaise : monthlyBudgetPaise}
           onSave={handleSaveFinancialValue}
           onClose={() => setEditingType(null)}
         />

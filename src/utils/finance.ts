@@ -1,4 +1,4 @@
-import { Expense } from '../types';
+import type { Expense } from '../types';
 
 export const MAX_AMOUNT_RUPEES = 1000000; // ₹10,00,000 (10 Lakh)
 export const MAX_AMOUNT_PAISE = MAX_AMOUNT_RUPEES * 100; // 10,00,000 * 100 paise
@@ -83,4 +83,22 @@ export const getLocalCurrentMonthId = (date = new Date()): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   return `${year}-${month}`;
+};
+
+/**
+ * Converts integer paise into an editable rupees string (e.g. 7500000 -> "75000", 25050 -> "250.50").
+ * Pure integer arithmetic, zero floating-point imprecision.
+ */
+export const paiseToRupeesInput = (paise: number | null): string => {
+  if (paise === null || paise === undefined) return '';
+  const isNegative = paise < 0;
+  const absPaise = Math.abs(paise);
+  const rupees = Math.floor(absPaise / 100);
+  const rem = absPaise % 100;
+
+  let result = rupees.toString();
+  if (rem > 0) {
+    result += `.${String(rem).padStart(2, '0')}`;
+  }
+  return isNegative ? `-${result}` : result;
 };
