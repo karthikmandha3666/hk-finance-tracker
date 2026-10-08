@@ -102,3 +102,93 @@ export const paiseToRupeesInput = (paise: number | null): string => {
   }
   return isNegative ? `-${result}` : result;
 };
+
+/**
+ * Calculates calendar day difference between dateStr1 and dateStr2 (dateStr1 - dateStr2).
+ * Uses local calendar dates to avoid timezone shifts.
+ */
+export const getDifferenceInCalendarDays = (dateStr1: string, dateStr2: string): number => {
+  const [y1, m1, d1] = dateStr1.split('-').map(Number);
+  const [y2, m2, d2] = dateStr2.split('-').map(Number);
+  const t1 = new Date(y1, m1 - 1, d1).getTime();
+  const t2 = new Date(y2, m2 - 1, d2).getTime();
+  const diffMs = t1 - t2;
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+};
+
+/**
+ * Categorizes a due date relative to today's local date.
+ */
+export const getDueDateStatus = (
+  dueDateStr: string,
+  todayStr = getLocalTodayDateString()
+): 'overdue' | 'today' | 'within-7-days' | 'later' => {
+  if (dueDateStr < todayStr) return 'overdue';
+  if (dueDateStr === todayStr) return 'today';
+  const diffDays = getDifferenceInCalendarDays(dueDateStr, todayStr);
+  if (diffDays <= 7) return 'within-7-days';
+  return 'later';
+};
+
+/**
+ * Deterministically advances a due date according to its recurrence frequency.
+ * Handles month boundaries, year boundaries, leap years, and month-end clamping (e.g. Jan 31 -> Feb 28/29).
+ */
+export const advanceDueDate = (
+  currentDateStr: string,
+  frequency: 'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly'
+): string => {
+  const [y, m, d] = currentDateStr.split('-').map(Number);
+
+  switch (frequency) {
+    case 'Daily': {
+      const next = new Date(y, m - 1, d + 1);
+      return getLocalTodayDateString(next);
+    }
+    case 'Weekly': {
+      const next = new Date(y, m - 1, d + 7);
+      return getLocalTodayDateString(next);
+    }
+    case 'Monthly': {
+      let targetM = m + 1;
+      let targetY = y;
+      if (targetM > 12) {
+        targetM = 1;
+        targetY += 1;
+      }
+      // Clamping: max days in target month
+      const maxDays = new Date(targetY, targetM, 0).getDate();
+      const clampedDay = Math.min(d, maxDays);
+      return `${targetY}-${String(targetM).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+    }
+    case 'Yearly': {
+      const targetY = y + 1;
+      const maxDays = new Date(targetY, m, 0).getDate();
+      const clampedDay = Math.min(d, maxDays);
+      return `${targetY}-${String(m).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+    }
+    case 'One-time':
+    default:
+      return currentDateStr;
+  }
+};
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Returns a human-friendly due date string relative to local today (e.g. "Today", "Tomorrow", "Oct 15").
+ */
+export const formatDueDateFriendly = (
+  dueDateStr: string,
+  todayStr = getLocalTodayDateString()
+): string => {
+  if (dueDateStr === todayStr) return 'Today';
+  const diffDays = getDifferenceInCalendarDays(dueDateStr, todayStr);
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays === -1) return 'Yesterday';
+  if (diffDays < -1) return `${Math.abs(diffDays)}d Overdue`;
+
+  const [, m, d] = dueDateStr.split('-').map(Number);
+  const monthName = SHORT_MONTHS[m - 1] || '';
+  return `${monthName} ${d}`;
+};

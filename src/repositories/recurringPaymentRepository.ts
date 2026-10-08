@@ -1,0 +1,234 @@
+import { db } from '../db/db';
+import { RecurringPayment, RecurrenceFrequency } from '../types';
+import {
+  advanceDueDate,
+  MAX_AMOUNT_PAISE,
+} from '../utils/finance';
+
+const MAX_NAME_LENGTH = 50;
+const MAX_NOTE_LENGTH = 120;
+const VALID_FREQUENCIES: RecurrenceFrequency[] = ['One-time', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
+
+function validatePaymentInput(data: {
+  name: string;
+  amountInPaise: number;
+  category: string;
+  paymentMethod: string;
+  frequency: RecurrenceFrequency;
+  nextDueDate: string;
+  note?: string;
+}): void {
+  if (typeof data.name !== 'string') {
+    throw new Error('Payment name must be a text string.');
+  }
+  const trimmedName = data.name.trim();
+  if (trimmedName.length === 0) {
+    throw new Error('Payment name is required.');
+  }
+  if (trimmedName.length > MAX_NAME_LENGTH) {
+    throw new Error(`Payment name cannot exceed ${MAX_NAME_LENGTH} characters.`);
+  }
+
+  if (typeof data.amountInPaise !== 'number' || !Number.isInteger(data.amountInPaise) || data.amountInPaise <= 0) {
+    throw new Error('Amount must be a valid positive number greater than ₹0.');
+  }
+  if (data.amountInPaise > MAX_AMOUNT_PAISE) {
+    throw new Error('Amount cannot exceed ₹10,00,000.');
+  }
+
+  if (typeof data.category !== 'string' || data.category.trim() === '') {
+    throw new Error('Category is required.');
+  }
+
+  if (typeof data.paymentMethod !== 'string' || data.paymentMethod.trim() === '') {
+    throw new Error('Payment method is required.');
+  }
+
+  if (!VALID_FREQUENCIES.includes(data.frequency)) {
+    throw new Error(`Invalid frequency: ${data.frequency}`);
+  }
+
+  if (typeof data.nextDueDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(data.nextDueDate.trim())) {
+    throw new Error('Next due date must be a valid date in YYYY-MM-DD format.');
+  }
+
+  // Validate calendar date validity (e.g. reject 2026-02-31)
+  const [y, m, d] = data.nextDueDate.trim().split('-').map(Number);
+  const dateObj = new Date(y, m - 1, d);
+  if (dateObj.getFullYear() !== y || dateObj.getMonth() !== m - 1 || dateObj.getDate() !== d) {
+    throw new Error(`Invalid calendar date: ${data.nextDueDate}`);
+  }
+
+  if (data.note && data.note.trim().length > MAX_NOTE_LENGTH) {
+    throw new Error(`Note cannot exceed ${MAX_NOTE_LENGTH} characters.`);
+  }
+}
+
+export const recurringPaymentRepository = {
+  /**
+   * Retrieves all recurring payments (both active and inactive).
+   */
+  async getRecurringPayments(): Promise<RecurringPayment[]> {
+    return db.recurringPayments.toArray();
+  },
+
+  /**
+   * Retrieves only active recurring payments.
+   */
+  async getActiveRecurringPayments(): Promise<RecurringPayment[]> {
+    const all = await db.recurringPayments.toArray();
+    return all.filter((p) => p.isActive);
+  },
+
+  /**
+   * Retrieves active upcoming payments sorted chronologically by nextDueDate ascending.
+   */
+  async getUpcomingPayments(): Promise<RecurringPayment[]> {
+    const active = await this.getActiveRecurringPayments();
+    return active.sort((a, b) => {
+      if (a.nextDueDate !== b.nextDueDate) {
+        return a.nextDueDate.localeCompare(b.nextDueDate);
+      }
+      return a.createdAt.localeCompare(b.createdAt);
+    });
+  },
+
+  /**
+   * Retrieves a recurring payment by unique ID.
+   */
+  async getRecurringPaymentById(id: string): Promise<RecurringPayment | undefined> {
+    return db.recurringPayments.get(id);
+  },
+
+  /**
+   * Adds a new validated recurring payment.
+   */
+  async addRecurringPayment(data: {
+    name: string;
+    amountInPaise: number;
+    category: string;
+    paymentMethod: string;
+    frequency: RecurrenceFrequency;
+    nextDueDate: string;
+    note?: string;
+    isActive?: boolean;
+  }): Promise<RecurringPayment> {
+    validatePaymentInput(data);
+
+    const now = new Date().toISOString();
+    const newRecord: RecurringPayment = {
+      id: crypto.randomUUID(),
+      name: data.name.trim(),
+      amountInPaise: data.amountInPaise,
+      category: data.category.trim(),
+      paymentMethod: data.paymentMethod.trim(),
+      frequency: data.frequency,
+      nextDueDate: data.nextDueDate.trim(),
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      note: data.note ? data.note.trim() : undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await db.recurringPayments.add(newRecord);
+    return newRecord;
+  },
+
+  /**
+   * Updates an existing recurring payment, preserving original ID and createdAt.
+   */
+  async updateRecurringPayment(payment: RecurringPayment): Promise<RecurringPayment> {
+    validatePaymentInput(payment);
+
+    const existing = await db.recurringPayments.get(payment.id);
+    if (!existing) {
+      throw new Error(`Recurring payment with ID "${payment.id}" not found.`);
+    }
+
+    const updated: RecurringPayment = {
+      ...payment,
+      name: payment.name.trim(),
+      category: payment.category.trim(),
+      paymentMethod: payment.paymentMethod.trim(),
+      nextDueDate: payment.nextDueDate.trim(),
+      note: payment.note ? payment.note.trim() : undefined,
+      createdAt: existing.createdAt, // strictly preserve original createdAt
+      updatedAt: new Date().toISOString(),
+    };
+
+    await db.recurringPayments.put(updated);
+    return updated;
+  },
+
+  /**
+   * Deactivates a recurring payment (soft delete).
+   */
+  async deactivateRecurringPayment(id: string): Promise<RecurringPayment> {
+    const existing = await db.recurringPayments.get(id);
+    if (!existing) {
+      throw new Error(`Recurring payment with ID "${id}" not found.`);
+    }
+
+    const updated: RecurringPayment = {
+      ...existing,
+      isActive: false,
+      updatedAt: new Date().toISOString(),
+    };
+    await db.recurringPayments.put(updated);
+    return updated;
+  },
+
+  /**
+   * Reactivates an inactive recurring payment.
+   */
+  async reactivateRecurringPayment(id: string): Promise<RecurringPayment> {
+    const existing = await db.recurringPayments.get(id);
+    if (!existing) {
+      throw new Error(`Recurring payment with ID "${id}" not found.`);
+    }
+
+    const updated: RecurringPayment = {
+      ...existing,
+      isActive: true,
+      updatedAt: new Date().toISOString(),
+    };
+    await db.recurringPayments.put(updated);
+    return updated;
+  },
+
+  /**
+   * Marks a payment as paid.
+   * If frequency is 'One-time': marks completed/inactive.
+   * If recurring: advances nextDueDate according to frequency.
+   * Note: Does NOT automatically create an expense.
+   */
+  async markAsPaid(id: string): Promise<RecurringPayment> {
+    const existing = await db.recurringPayments.get(id);
+    if (!existing) {
+      throw new Error(`Recurring payment with ID "${id}" not found.`);
+    }
+
+    const now = new Date().toISOString();
+
+    if (existing.frequency === 'One-time') {
+      const updated: RecurringPayment = {
+        ...existing,
+        isActive: false,
+        updatedAt: now,
+      };
+      await db.recurringPayments.put(updated);
+      return updated;
+    }
+
+    // Recurring payment: advance next due date
+    const nextDate = advanceDueDate(existing.nextDueDate, existing.frequency);
+    const updated: RecurringPayment = {
+      ...existing,
+      nextDueDate: nextDate,
+      updatedAt: now,
+    };
+
+    await db.recurringPayments.put(updated);
+    return updated;
+  },
+};

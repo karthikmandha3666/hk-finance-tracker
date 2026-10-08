@@ -8,6 +8,7 @@ import { HomeView } from './components/HomeView';
 import { AddExpenseView } from './components/AddExpenseView';
 import { EditExpenseView } from './components/EditExpenseView';
 import { SettingsView } from './components/SettingsView';
+import { UpcomingPaymentsView } from './components/UpcomingPaymentsView';
 import { PlaceholderView } from './components/PlaceholderView';
 import { EditFinancialModal } from './components/EditFinancialModal';
 import { expenseRepository } from './repositories/expenseRepository';
@@ -20,6 +21,9 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   // Dynamically initialize to current local client month (no hardcoded '2026-10')
   const [selectedMonthId, setSelectedMonthId] = useState<string>(getLocalCurrentMonthId);
+
+  // View state for upcoming/recurring payments
+  const [viewingUpcoming, setViewingUpcoming] = useState<boolean>(false);
 
   // Modal editor state for income and budget
   const [editingType, setEditingType] = useState<'income' | 'budget' | null>(null);
@@ -54,6 +58,7 @@ export const App: React.FC = () => {
 
   const handleTabChange = (tab: Tab) => {
     setEditingExpense(null);
+    setViewingUpcoming(false);
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -74,7 +79,7 @@ export const App: React.FC = () => {
       {/* Main App Container */}
       <div className="app-frame">
         {/* Top Header - Always visible with HK branding */}
-        <Header onAddClick={() => { setEditingExpense(null); handleTabChange('add'); }} />
+        <Header onAddClick={() => { setEditingExpense(null); setViewingUpcoming(false); handleTabChange('add'); }} />
 
         {/* Dynamic Content Views */}
         <main className="content-area">
@@ -85,6 +90,8 @@ export const App: React.FC = () => {
               onExpenseUpdated={() => setEditingExpense(null)}
               onExpenseDeleted={() => setEditingExpense(null)}
             />
+          ) : viewingUpcoming ? (
+            <UpcomingPaymentsView onBack={() => setViewingUpcoming(false)} />
           ) : (
             <>
               {activeTab === 'home' && (
@@ -100,6 +107,7 @@ export const App: React.FC = () => {
                   onAddExpenseClick={() => handleTabChange('add')}
                   onViewAllExpensesClick={() => handleTabChange('expenses')}
                   onEditExpense={(item) => setEditingExpense(item)}
+                  onOpenUpcoming={() => setViewingUpcoming(true)}
                 />
               )}
 

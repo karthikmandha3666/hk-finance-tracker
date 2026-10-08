@@ -1,11 +1,15 @@
 import React from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { MonthData, Expense } from '../types';
 import { MonthSelector } from './MonthSelector';
+import { recurringPaymentRepository } from '../repositories/recurringPaymentRepository';
 import {
   formatPaiseToRupees,
   sumExpenses,
   calculateTodaySpending,
   getLocalTodayDateString,
+  getDueDateStatus,
+  formatDueDateFriendly,
 } from '../utils/finance';
 
 export interface HomeViewProps {
@@ -20,6 +24,7 @@ export interface HomeViewProps {
   onAddExpenseClick: () => void;
   onViewAllExpensesClick: () => void;
   onEditExpense: (expense: Expense) => void;
+  onOpenUpcoming: () => void;
 }
 
 const getCategoryIconClass = (cat: string): string => {
@@ -148,7 +153,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onAddExpenseClick,
   onViewAllExpensesClick,
   onEditExpense,
+  onOpenUpcoming,
 }) => {
+  // Live query for upcoming obligations from Dexie
+  const upcomingPayments = useLiveQuery(() => recurringPaymentRepository.getUpcomingPayments()) ?? [];
+  const topUpcoming = upcomingPayments.slice(0, 3);
+
   const currentMonthData =
     months.find((m) => m.id === selectedMonthId) ||
     months[months.length - 1] || {
@@ -355,6 +365,80 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </svg>
           <span>Add Expense</span>
         </button>
+      </section>
+
+      {/* Lightweight Upcoming Payments Dashboard Section (Stage 7) */}
+      <section className="upcoming-summary-section">
+        <div className="section-header">
+          <div className="section-title-wrapper">
+            <h3 className="section-title">Upcoming Obligations</h3>
+          </div>
+          <button
+            type="button"
+            className="btn-text-link"
+            onClick={onOpenUpcoming}
+          >
+            {upcomingPayments.length > 0 ? `View all (${upcomingPayments.length})` : 'Manage'}
+          </button>
+        </div>
+
+        {upcomingPayments.length === 0 ? (
+          <div className="upcoming-home-empty">
+            <p>No upcoming bills or recurring payments.</p>
+            <button
+              type="button"
+              className="btn-mini-add-upcoming"
+              onClick={onOpenUpcoming}
+            >
+              + Add Obligation
+            </button>
+          </div>
+        ) : (
+          <div className="upcoming-home-list">
+            {topUpcoming.map((item) => {
+              const status = getDueDateStatus(item.nextDueDate, localTodayStr);
+              return (
+                <div
+                  key={item.id}
+                  className={`upcoming-home-item ${status}`}
+                  onClick={onOpenUpcoming}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="upcoming-home-left">
+                    <span className={`upcoming-home-badge ${status}`}>
+                      {formatDueDateFriendly(item.nextDueDate, localTodayStr)}
+                    </span>
+                    <div className="upcoming-home-text">
+                      <span className="upcoming-home-name">{item.name}</span>
+                      <span className="upcoming-home-cat">{item.category} &bull; {item.frequency}</span>
+                    </div>
+                  </div>
+
+                  <div className="upcoming-home-right">
+                    <span className="upcoming-home-amount">
+                      ₹{formatPaiseToRupees(item.amountInPaise)}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-mini-paid"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        recurringPaymentRepository.markAsPaid(item.id);
+                      }}
+                      title="Mark as paid"
+                      aria-label={`Mark ${item.name} as paid`}
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* Selected Month Expenses List (Real Local-First Dexie Storage) */}

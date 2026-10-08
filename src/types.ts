@@ -45,3 +45,19 @@ export interface MonthlySettings {
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
 }
+
+export type RecurrenceFrequency = 'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
+
+export interface RecurringPayment {
+  id: string; // UUID
+  name: string;
+  amountInPaise: number; // integer paise
+  category: string;
+  paymentMethod: string;
+  frequency: RecurrenceFrequency;
+  nextDueDate: string; // YYYY-MM-DD local calendar date
+  isActive: boolean;
+  note?: string;
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
