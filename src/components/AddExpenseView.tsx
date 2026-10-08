@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Expense, ExpenseCategory, PaymentMethod } from '../types';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Expense } from '../types';
 import { expenseRepository } from '../repositories/expenseRepository';
+import { categoryRepository } from '../repositories/categoryRepository';
+import { paymentMethodRepository } from '../repositories/paymentMethodRepository';
 import {
   rupeesToPaise,
   MAX_AMOUNT_RUPEES,
@@ -11,42 +14,30 @@ import {
 interface AddExpenseViewProps {
   onCancel: () => void;
   onExpenseAdded?: () => void;
+  onNavigateToSettings?: () => void;
 }
 
-const CATEGORIES: ExpenseCategory[] = [
-  'Food',
-  'Travel',
-  'Rent',
-  'Bills',
-  'Shopping',
-  'Medical',
-  'Family',
-  'Coffee & Snacks',
-  'Entertainment',
-  'EMI/Loan',
-  'Subscription',
-  'Other',
-];
-
-const PAYMENT_METHODS: PaymentMethod[] = [
-  'Cash',
-  'UPI',
-  'Debit Card',
-  'Credit Card',
-  'Bank Transfer',
-  'Other',
-];
-
-export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel, onExpenseAdded }) => {
+export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
+  onCancel,
+  onExpenseAdded,
+  onNavigateToSettings,
+}) => {
   // Amount MUST start completely empty for a new expense (no hardcoded ₹250 or demo value)
   const [amount, setAmount] = useState<string>('');
   const [amountError, setAmountError] = useState<string | null>(null);
 
-  const [selectedCategory, setSelectedCategory] = useState<ExpenseCategory>('Food');
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('UPI');
+  // Live queries for active categories and payment methods from local repositories
+  const activeCategories = useLiveQuery(() => categoryRepository.getActiveCategories()) ?? [];
+  const activePaymentMethods = useLiveQuery(() => paymentMethodRepository.getActivePaymentMethods()) ?? [];
+
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedPayment, setSelectedPayment] = useState<string>('');
   // Initialized dynamically from actual current local client date
   const [date, setDate] = useState<string>(getLocalTodayDateString);
   const [note, setNote] = useState<string>('');
+
+  const effectiveCategory = selectedCategory || (activeCategories.length > 0 ? activeCategories[0].name : '');
+  const effectivePayment = selectedPayment || (activePaymentMethods.length > 0 ? activePaymentMethods[0].name : '');
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -114,7 +105,9 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel, onExpe
     amountError === null &&
     amountPaise > 0 &&
     amountPaise <= MAX_AMOUNT_PAISE &&
-    date.trim() !== '';
+    date.trim() !== '' &&
+    effectiveCategory !== '' &&
+    effectivePayment !== '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,8 +123,8 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel, onExpe
       const newExpense: Expense = {
         id: crypto.randomUUID(),
         amountInPaise: amountPaise,
-        category: selectedCategory,
-        paymentMethod: selectedPayment,
+        category: effectiveCategory,
+        paymentMethod: effectivePayment,
         date: date.trim(),
         note: trimmedNote,
         currency: 'INR',
@@ -145,8 +138,8 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel, onExpe
       setAmount('');
       setNote('');
       setDate(getLocalTodayDateString());
-      setSelectedCategory('Food');
-      setSelectedPayment('UPI');
+      setSelectedCategory('');
+      setSelectedPayment('');
 
       // Notify parent & return to Home
       if (onExpenseAdded) {
@@ -207,18 +200,33 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel, onExpe
         {/* Category Selector Grid */}
         <div className="form-group">
           <label className="form-label">Category</label>
-          <div className="category-chips-grid">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                className={`category-chip ${selectedCategory === cat ? 'selected' : ''}`}
-                onClick={() => setSelectedCategory(cat)}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
+          {activeCategories.length === 0 ? (
+            <div className="empty-chips-notice" role="alert">
+              <p>No active categories available.</p>
+              {onNavigateToSettings && (
+                <button
+                  type="button"
+                  className="btn-link-settings"
+                  onClick={onNavigateToSettings}
+                >
+                  Manage Categories in Settings &rarr;
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="category-chips-grid">
+              {activeCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`category-chip ${effectiveCategory === cat.name ? 'selected' : ''}`}
+                  onClick={() => setSelectedCategory(cat.name)}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Date Selector */}
@@ -236,18 +244,33 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({ onCancel, onExpe
         {/* Payment Method Selector */}
         <div className="form-group">
           <label className="form-label">Payment Method</label>
-          <div className="payment-chips-grid">
-            {PAYMENT_METHODS.map((method) => (
-              <button
-                key={method}
-                type="button"
-                className={`payment-chip ${selectedPayment === method ? 'selected' : ''}`}
-                onClick={() => setSelectedPayment(method)}
-              >
-                {method}
-              </button>
-            ))}
-          </div>
+          {activePaymentMethods.length === 0 ? (
+            <div className="empty-chips-notice" role="alert">
+              <p>No active payment methods available.</p>
+              {onNavigateToSettings && (
+                <button
+                  type="button"
+                  className="btn-link-settings"
+                  onClick={onNavigateToSettings}
+                >
+                  Manage Payment Methods in Settings &rarr;
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="payment-chips-grid">
+              {activePaymentMethods.map((method) => (
+                <button
+                  key={method.id}
+                  type="button"
+                  className={`payment-chip ${effectivePayment === method.name ? 'selected' : ''}`}
+                  onClick={() => setSelectedPayment(method.name)}
+                >
+                  {method.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Optional Note Field (Max 120 chars) */}

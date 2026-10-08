@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
-import { Expense, ExpenseCategory, PaymentMethod } from '../types';
+import React, { useState, useMemo } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Expense } from '../types';
 import { expenseRepository } from '../repositories/expenseRepository';
+import { categoryRepository } from '../repositories/categoryRepository';
+import { paymentMethodRepository } from '../repositories/paymentMethodRepository';
 import {
   rupeesToPaise,
   formatPaiseToRupees,
@@ -16,42 +19,58 @@ interface EditExpenseViewProps {
   onExpenseDeleted?: () => void;
 }
 
-const CATEGORIES: ExpenseCategory[] = [
-  'Food',
-  'Travel',
-  'Rent',
-  'Bills',
-  'Shopping',
-  'Medical',
-  'Family',
-  'Coffee & Snacks',
-  'Entertainment',
-  'EMI/Loan',
-  'Subscription',
-  'Other',
-];
-
-const PAYMENT_METHODS: PaymentMethod[] = [
-  'Cash',
-  'UPI',
-  'Debit Card',
-  'Credit Card',
-  'Bank Transfer',
-  'Other',
-];
-
 export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
   expense,
   onCancel,
   onExpenseUpdated,
   onExpenseDeleted,
 }) => {
+  // Live queries for active categories and payment methods
+  const activeCategories = useLiveQuery(() => categoryRepository.getActiveCategories()) ?? [];
+  const activePaymentMethods = useLiveQuery(() => paymentMethodRepository.getActivePaymentMethods()) ?? [];
+
+  // Build category choices: active categories + historical expense category if inactive/missing
+  const categoryOptions = useMemo(() => {
+    const options = activeCategories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      isInactive: false,
+    }));
+    const hasExisting = options.some((opt) => opt.name === expense.category);
+    if (!hasExisting && expense.category) {
+      options.push({
+        id: '__historical_cat__',
+        name: expense.category,
+        isInactive: true,
+      });
+    }
+    return options;
+  }, [activeCategories, expense.category]);
+
+  // Build payment method choices: active payment methods + historical method if inactive/missing
+  const paymentMethodOptions = useMemo(() => {
+    const options = activePaymentMethods.map((m) => ({
+      id: m.id,
+      name: m.name,
+      isInactive: false,
+    }));
+    const hasExisting = options.some((opt) => opt.name === expense.paymentMethod);
+    if (!hasExisting && expense.paymentMethod) {
+      options.push({
+        id: '__historical_pm__',
+        name: expense.paymentMethod,
+        isInactive: true,
+      });
+    }
+    return options;
+  }, [activePaymentMethods, expense.paymentMethod]);
+
   // Pre-fill existing expense fields
   const [amount, setAmount] = useState<string>(() => paiseToRupeesInput(expense.amountInPaise));
   const [amountError, setAmountError] = useState<string | null>(null);
 
-  const [selectedCategory, setSelectedCategory] = useState<ExpenseCategory>(expense.category);
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>(expense.paymentMethod);
+  const [selectedCategory, setSelectedCategory] = useState<string>(expense.category);
+  const [selectedPayment, setSelectedPayment] = useState<string>(expense.paymentMethod);
   const [date, setDate] = useState<string>(expense.date);
   const [note, setNote] = useState<string>(expense.note || '');
 
@@ -123,7 +142,9 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
     amountError === null &&
     amountPaise > 0 &&
     amountPaise <= MAX_AMOUNT_PAISE &&
-    date.trim() !== '';
+    date.trim() !== '' &&
+    selectedCategory.trim() !== '' &&
+    selectedPayment.trim() !== '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,15 +268,16 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
         <div className="form-group">
           <label className="form-label">Category</label>
           <div className="category-chips-grid">
-            {CATEGORIES.map((cat) => (
+            {categoryOptions.map((cat) => (
               <button
-                key={cat}
+                key={cat.id}
                 type="button"
-                className={`category-chip ${selectedCategory === cat ? 'selected' : ''}`}
-                onClick={() => setSelectedCategory(cat)}
+                className={`category-chip ${selectedCategory === cat.name ? 'selected' : ''} ${cat.isInactive ? 'chip-inactive' : ''}`}
+                onClick={() => setSelectedCategory(cat.name)}
                 disabled={isSaving || isDeleting}
               >
-                {cat}
+                {cat.name}
+                {cat.isInactive && <span className="chip-inactive-indicator"> (Inactive)</span>}
               </button>
             ))}
           </div>
@@ -278,15 +300,16 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
         <div className="form-group">
           <label className="form-label">Payment Method</label>
           <div className="payment-chips-grid">
-            {PAYMENT_METHODS.map((method) => (
+            {paymentMethodOptions.map((method) => (
               <button
-                key={method}
+                key={method.id}
                 type="button"
-                className={`payment-chip ${selectedPayment === method ? 'selected' : ''}`}
-                onClick={() => setSelectedPayment(method)}
+                className={`payment-chip ${selectedPayment === method.name ? 'selected' : ''} ${method.isInactive ? 'chip-inactive' : ''}`}
+                onClick={() => setSelectedPayment(method.name)}
                 disabled={isSaving || isDeleting}
               >
-                {method}
+                {method.name}
+                {method.isInactive && <span className="chip-inactive-indicator"> (Inactive)</span>}
               </button>
             ))}
           </div>

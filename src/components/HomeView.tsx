@@ -1,5 +1,5 @@
 import React from 'react';
-import { MonthData, Expense, ExpenseCategory } from '../types';
+import { MonthData, Expense } from '../types';
 import { MonthSelector } from './MonthSelector';
 import {
   formatPaiseToRupees,
@@ -22,11 +22,13 @@ export interface HomeViewProps {
   onEditExpense: (expense: Expense) => void;
 }
 
-const getCategoryIconClass = (cat: ExpenseCategory): string => {
+const getCategoryIconClass = (cat: string): string => {
   switch (cat) {
     case 'Food': return 'food';
     case 'Travel': return 'travel';
-    case 'Coffee & Snacks': return 'coffee';
+    case 'Coffee & Snacks':
+    case 'Coffee/Snacks':
+      return 'coffee';
     case 'Bills': return 'bills';
     case 'Shopping': return 'shopping';
     case 'Rent': return 'rent';
@@ -39,7 +41,7 @@ const getCategoryIconClass = (cat: ExpenseCategory): string => {
   }
 };
 
-const renderCategoryIcon = (cat: ExpenseCategory): React.ReactNode => {
+const renderCategoryIcon = (cat: string): React.ReactNode => {
   switch (cat) {
     case 'Food':
       return (
@@ -57,6 +59,7 @@ const renderCategoryIcon = (cat: ExpenseCategory): React.ReactNode => {
         </svg>
       );
     case 'Coffee & Snacks':
+    case 'Coffee/Snacks':
       return (
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M17 8h1a4 4 0 1 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" />

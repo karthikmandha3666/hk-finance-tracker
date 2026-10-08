@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Tab, Expense } from './types';
 import { INITIAL_MONTHS } from './sampleData';
@@ -7,10 +7,13 @@ import { BottomNav } from './components/BottomNav';
 import { HomeView } from './components/HomeView';
 import { AddExpenseView } from './components/AddExpenseView';
 import { EditExpenseView } from './components/EditExpenseView';
+import { SettingsView } from './components/SettingsView';
 import { PlaceholderView } from './components/PlaceholderView';
 import { EditFinancialModal } from './components/EditFinancialModal';
 import { expenseRepository } from './repositories/expenseRepository';
 import { financialSettingsRepository } from './repositories/financialSettingsRepository';
+import { categoryRepository } from './repositories/categoryRepository';
+import { paymentMethodRepository } from './repositories/paymentMethodRepository';
 import { getLocalCurrentMonthId } from './utils/finance';
 
 export const App: React.FC = () => {
@@ -23,6 +26,16 @@ export const App: React.FC = () => {
 
   // Selected expense for editing or deletion
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+
+  // Automatically ensure default categories and payment methods are seeded on launch
+  useEffect(() => {
+    categoryRepository.ensureDefaults().catch((err) => {
+      console.error('Failed to ensure default categories:', err);
+    });
+    paymentMethodRepository.ensureDefaults().catch((err) => {
+      console.error('Failed to ensure default payment methods:', err);
+    });
+  }, []);
 
   // Live query for expenses in the selected month via repository abstraction
   const liveExpenses = useLiveQuery(
@@ -94,10 +107,15 @@ export const App: React.FC = () => {
                 <AddExpenseView
                   onCancel={() => handleTabChange('home')}
                   onExpenseAdded={() => handleTabChange('home')}
+                  onNavigateToSettings={() => handleTabChange('more')}
                 />
               )}
 
-              {(activeTab === 'expenses' || activeTab === 'budgets' || activeTab === 'more') && (
+              {activeTab === 'more' && (
+                <SettingsView onBack={() => handleTabChange('home')} />
+              )}
+
+              {(activeTab === 'expenses' || activeTab === 'budgets') && (
                 <PlaceholderView
                   tab={activeTab}
                   onGoHome={() => handleTabChange('home')}
