@@ -19,6 +19,7 @@ export interface HomeViewProps {
   onOpenEditBudget: () => void;
   onAddExpenseClick: () => void;
   onViewAllExpensesClick: () => void;
+  onEditExpense: (expense: Expense) => void;
 }
 
 const getCategoryIconClass = (cat: ExpenseCategory): string => {
@@ -143,6 +144,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenEditBudget,
   onAddExpenseClick,
   onViewAllExpensesClick,
+  onEditExpense,
 }) => {
   const currentMonthData =
     months.find((m) => m.id === selectedMonthId) ||
@@ -391,7 +393,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           ) : (
             expenses.map((item) => (
-              <article key={item.id} className="expense-item-row">
+              <article
+                key={item.id}
+                className="expense-item-row"
+                role="button"
+                tabIndex={0}
+                onClick={() => onEditExpense(item)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onEditExpense(item);
+                  }
+                }}
+                aria-label={`Edit ${item.category} expense: -₹${formatPaiseToRupees(item.amountInPaise)}, ${item.date}`}
+              >
                 <div className={`expense-icon-box ${getCategoryIconClass(item.category)}`}>
                   {renderCategoryIcon(item.category)}
                 </div>
@@ -409,6 +424,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     </span>
                     {item.note && <span className="expense-note">{item.note}</span>}
                   </div>
+                </div>
+
+                <div className="expense-action-hint" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
                 </div>
               </article>
             ))

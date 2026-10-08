@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Tab } from './types';
+import { Tab, Expense } from './types';
 import { INITIAL_MONTHS } from './sampleData';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './components/HomeView';
 import { AddExpenseView } from './components/AddExpenseView';
+import { EditExpenseView } from './components/EditExpenseView';
 import { PlaceholderView } from './components/PlaceholderView';
 import { EditFinancialModal } from './components/EditFinancialModal';
 import { expenseRepository } from './repositories/expenseRepository';
@@ -19,6 +20,9 @@ export const App: React.FC = () => {
 
   // Modal editor state for income and budget
   const [editingType, setEditingType] = useState<'income' | 'budget' | null>(null);
+
+  // Selected expense for editing or deletion
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   // Live query for expenses in the selected month via repository abstraction
   const liveExpenses = useLiveQuery(
@@ -36,6 +40,7 @@ export const App: React.FC = () => {
   const monthlyBudgetPaise = currentSettings?.budgetInPaise ?? null;
 
   const handleTabChange = (tab: Tab) => {
+    setEditingExpense(null);
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -56,37 +61,49 @@ export const App: React.FC = () => {
       {/* Main App Container */}
       <div className="app-frame">
         {/* Top Header - Always visible with HK branding */}
-        <Header onAddClick={() => handleTabChange('add')} />
+        <Header onAddClick={() => { setEditingExpense(null); handleTabChange('add'); }} />
 
         {/* Dynamic Content Views */}
         <main className="content-area">
-          {activeTab === 'home' && (
-            <HomeView
-              months={INITIAL_MONTHS}
-              selectedMonthId={selectedMonthId}
-              monthlyIncomePaise={monthlyIncomePaise}
-              monthlyBudgetPaise={monthlyBudgetPaise}
-              expenses={expenses}
-              onSelectMonth={setSelectedMonthId}
-              onOpenEditIncome={() => setEditingType('income')}
-              onOpenEditBudget={() => setEditingType('budget')}
-              onAddExpenseClick={() => handleTabChange('add')}
-              onViewAllExpensesClick={() => handleTabChange('expenses')}
+          {editingExpense ? (
+            <EditExpenseView
+              expense={editingExpense}
+              onCancel={() => setEditingExpense(null)}
+              onExpenseUpdated={() => setEditingExpense(null)}
+              onExpenseDeleted={() => setEditingExpense(null)}
             />
-          )}
+          ) : (
+            <>
+              {activeTab === 'home' && (
+                <HomeView
+                  months={INITIAL_MONTHS}
+                  selectedMonthId={selectedMonthId}
+                  monthlyIncomePaise={monthlyIncomePaise}
+                  monthlyBudgetPaise={monthlyBudgetPaise}
+                  expenses={expenses}
+                  onSelectMonth={setSelectedMonthId}
+                  onOpenEditIncome={() => setEditingType('income')}
+                  onOpenEditBudget={() => setEditingType('budget')}
+                  onAddExpenseClick={() => handleTabChange('add')}
+                  onViewAllExpensesClick={() => handleTabChange('expenses')}
+                  onEditExpense={(item) => setEditingExpense(item)}
+                />
+              )}
 
-          {activeTab === 'add' && (
-            <AddExpenseView
-              onCancel={() => handleTabChange('home')}
-              onExpenseAdded={() => handleTabChange('home')}
-            />
-          )}
+              {activeTab === 'add' && (
+                <AddExpenseView
+                  onCancel={() => handleTabChange('home')}
+                  onExpenseAdded={() => handleTabChange('home')}
+                />
+              )}
 
-          {(activeTab === 'expenses' || activeTab === 'budgets' || activeTab === 'more') && (
-            <PlaceholderView
-              tab={activeTab}
-              onGoHome={() => handleTabChange('home')}
-            />
+              {(activeTab === 'expenses' || activeTab === 'budgets' || activeTab === 'more') && (
+                <PlaceholderView
+                  tab={activeTab}
+                  onGoHome={() => handleTabChange('home')}
+                />
+              )}
+            </>
           )}
         </main>
 

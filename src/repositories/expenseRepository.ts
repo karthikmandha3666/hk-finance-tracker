@@ -53,4 +53,33 @@ export const expenseRepository = {
   async getExpensesForToday(todayDateStr: string): Promise<Expense[]> {
     return db.expenses.where('date').equals(todayDateStr).toArray();
   },
+
+  /**
+   * Retrieves an expense by its unique ID.
+   */
+  async getExpenseById(id: string): Promise<Expense | undefined> {
+    return db.expenses.get(id);
+  },
+
+  /**
+   * Updates an existing expense in IndexedDB.
+   */
+  async updateExpense(expense: Expense): Promise<void> {
+    const existing = await db.expenses.get(expense.id);
+    if (!existing) {
+      throw new Error(`Expense with id "${expense.id}" not found.`);
+    }
+    await db.expenses.put(expense);
+  },
+
+  /**
+   * Deletes an expense by its unique ID.
+   */
+  async deleteExpense(id: string): Promise<void> {
+    const existing = await db.expenses.get(id);
+    if (!existing) {
+      throw new Error(`Expense with id "${id}" not found.`);
+    }
+    await db.expenses.delete(id);
+  },
 };
