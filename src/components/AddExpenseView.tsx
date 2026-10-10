@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Expense } from '../types';
 import { expenseRepository } from '../repositories/expenseRepository';
@@ -11,17 +11,20 @@ import {
   getLocalTodayDateString,
   isValidCalendarDate,
 } from '../utils/finance';
+import { generateUUID } from '../utils/uuid';
 
 interface AddExpenseViewProps {
   onCancel: () => void;
   onExpenseAdded?: () => void;
   onNavigateToSettings?: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
   onCancel,
   onExpenseAdded,
   onNavigateToSettings,
+  onDirtyChange,
 }) => {
   // Amount MUST start completely empty for a new expense (no hardcoded ₹250 or demo value)
   const [amount, setAmount] = useState<string>('');
@@ -43,6 +46,14 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const isDirty = amount.trim() !== '' || note.trim() !== '';
+    onDirtyChange?.(isDirty);
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [amount, note, onDirtyChange]);
 
   const handleDateChange = (val: string) => {
     setDate(val);
@@ -140,7 +151,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
       const nowIso = new Date().toISOString();
 
       const newExpense: Expense = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         amountInPaise: amountPaise,
         category: effectiveCategory,
         paymentMethod: effectivePayment,

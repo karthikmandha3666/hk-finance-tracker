@@ -5,6 +5,15 @@ import { categoryRepository } from '../repositories/categoryRepository';
 import { paymentMethodRepository } from '../repositories/paymentMethodRepository';
 import { recurringPaymentRepository } from '../repositories/recurringPaymentRepository';
 import { loanRepository } from '../repositories/loanRepository';
+import {
+  exportBackupData,
+  downloadBackupFile,
+  validateBackupPayload,
+  restoreBackupData,
+  BackupDataEnvelope,
+  ValidationResult,
+} from '../utils/backup';
+import { db } from '../db/db';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -12,7 +21,7 @@ interface SettingsViewProps {
   onOpenLoans: () => void;
 }
 
-type SettingsSection = 'categories' | 'paymentMethods';
+type SettingsSection = 'categories' | 'paymentMethods' | 'backup';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   onBack,
@@ -20,6 +29,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenLoans,
 }) => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('categories');
+
+  // Backup & Restore states (MAS-18)
+  const [backupSuccessMsg, setBackupSuccessMsg] = useState<string | null>(null);
+  const [backupErrorMsg, setBackupErrorMsg] = useState<string | null>(null);
+  const [pendingRestoreEnvelope, setPendingRestoreEnvelope] = useState<BackupDataEnvelope | null>(null);
+  const [pendingValidation, setPendingValidation] = useState<ValidationResult | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [isRestoring, setIsRestoring] = useState<boolean>(false);
 
   // Modal dialog states
   const [modalMode, setModalMode] = useState<'add-category' | 'rename-category' | 'add-payment' | 'rename-payment' | null>(null);
@@ -47,6 +64,72 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Live queries for navigation hub module summaries
   const upcomingPayments = useLiveQuery(() => recurringPaymentRepository.getUpcomingPayments()) ?? [];
   const activeLoans = useLiveQuery(() => loanRepository.getActiveLoans()) ?? [];
+
+  // Handlers for Backup & Restore (MAS-18)
+  const handleExportBackup = async () => {
+    setIsExporting(true);
+    setBackupErrorMsg(null);
+    try {
+      const envelope = await exportBackupData(db);
+      downloadBackupFile(envelope);
+      setBackupSuccessMsg('Backup downloaded successfully. Keep this file safe.');
+      setTimeout(() => setBackupSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('Backup export failed:', err);
+      setBackupErrorMsg('Failed to export backup. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleFileSelectForRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBackupErrorMsg(null);
+    setBackupSuccessMsg(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+        const validation = validateBackupPayload(parsed);
+        if (!validation.isValid) {
+          setBackupErrorMsg(validation.error || 'Invalid backup file.');
+          return;
+        }
+        setPendingRestoreEnvelope(parsed as BackupDataEnvelope);
+        setPendingValidation(validation);
+      } catch {
+        setBackupErrorMsg('Unable to parse file. Please upload a valid JSON backup file.');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setBackupErrorMsg('Failed to read the selected file.');
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!pendingRestoreEnvelope || isRestoring) return;
+    setIsRestoring(true);
+    setBackupErrorMsg(null);
+    try {
+      await restoreBackupData(db, pendingRestoreEnvelope);
+      setPendingRestoreEnvelope(null);
+      setPendingValidation(null);
+      setBackupSuccessMsg('Data restored successfully! All records updated.');
+      setTimeout(() => setBackupSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error('Restore failed:', err);
+      setBackupErrorMsg(err instanceof Error ? err.message : 'Restore failed.');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   // --- Handlers for Categories ---
   const handleOpenAddCategory = () => {
@@ -287,16 +370,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <button
           type="button"
           className={`settings-tab-btn ${activeSection === 'categories' ? 'active' : ''}`}
-          onClick={() => { setActiveSection('categories'); setGeneralError(null); }}
+          onClick={() => { setActiveSection('categories'); setGeneralError(null); setBackupErrorMsg(null); setBackupSuccessMsg(null); }}
         >
           Categories ({activeCategories.length})
         </button>
         <button
           type="button"
           className={`settings-tab-btn ${activeSection === 'paymentMethods' ? 'active' : ''}`}
-          onClick={() => { setActiveSection('paymentMethods'); setGeneralError(null); }}
+          onClick={() => { setActiveSection('paymentMethods'); setGeneralError(null); setBackupErrorMsg(null); setBackupSuccessMsg(null); }}
         >
           Payment Methods ({activePaymentMethods.length})
+        </button>
+        <button
+          type="button"
+          className={`settings-tab-btn ${activeSection === 'backup' ? 'active' : ''}`}
+          onClick={() => { setActiveSection('backup'); setGeneralError(null); setBackupErrorMsg(null); setBackupSuccessMsg(null); }}
+        >
+          Backup & Restore
         </button>
       </div>
 
@@ -512,6 +602,93 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
+      {/* --- BACKUP & RESTORE SECTION (MAS-18) --- */}
+      {activeSection === 'backup' && (
+        <div className="settings-content-pane">
+          <div className="settings-section-header">
+            <div>
+              <h3 className="settings-pane-title">Data Backup & Restore</h3>
+              <p className="settings-pane-subtitle">Export your records or restore from a backup</p>
+            </div>
+          </div>
+
+          {backupSuccessMsg && (
+            <div className="backup-alert-success" role="status" aria-live="polite">
+              ✓ {backupSuccessMsg}
+            </div>
+          )}
+
+          {backupErrorMsg && (
+            <div className="backup-alert-error" role="alert">
+              ✕ {backupErrorMsg}
+            </div>
+          )}
+
+          <div className="backup-pane-container">
+            {/* Export Card */}
+            <div className="backup-card">
+              <div className="backup-card-header">
+                <div className="backup-card-icon export" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </div>
+                <h4 className="backup-card-title">Download Backup</h4>
+              </div>
+              <p className="backup-card-desc">
+                Spendly is 100% offline and stores your data securely on this device. Save a copy of all your expenses, budgets, categories, obligations, and loans to your device as a JSON file.
+              </p>
+              <button
+                type="button"
+                className="btn-backup-action export"
+                onClick={handleExportBackup}
+                disabled={isExporting}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>{isExporting ? 'Exporting...' : 'Export Backup File'}</span>
+              </button>
+            </div>
+
+            {/* Restore Card */}
+            <div className="backup-card">
+              <div className="backup-card-header">
+                <div className="backup-card-icon restore" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+                <h4 className="backup-card-title">Restore from Backup</h4>
+              </div>
+              <p className="backup-card-desc">
+                Restore your financial data from a previously exported Spendly backup JSON file. All records will be verified and restored atomically.
+              </p>
+              <label className="btn-backup-action restore-select">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span>Choose Backup JSON File</span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleFileSelectForRestore}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- ADD / RENAME MODAL --- */}
       {modalMode !== null && (
         <div
@@ -707,6 +884,105 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               >
                 {isSubmitting ? 'Deactivating...' : 'Deactivate'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restore Confirmation Modal (MAS-18) */}
+      {pendingRestoreEnvelope && pendingValidation && (
+        <div
+          className="modal-backdrop"
+          onClick={() => !isRestoring && setPendingRestoreEnvelope(null)}
+          role="presentation"
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="restore-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <h3 id="restore-modal-title" className="modal-title">Restore Data from Backup?</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => !isRestoring && setPendingRestoreEnvelope(null)}
+                aria-label="Close dialog"
+                disabled={isRestoring}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="modal-desc">
+              The backup file was verified successfully. Restoring will <strong>replace all existing records</strong> with the data in this backup:
+            </p>
+
+            <div className="backup-counts-summary">
+              <div className="backup-count-item">
+                <span>Expenses:</span>
+                <strong>{pendingValidation.counts?.expenses ?? 0}</strong>
+              </div>
+              <div className="backup-count-item">
+                <span>Categories:</span>
+                <strong>{pendingValidation.counts?.categories ?? 0}</strong>
+              </div>
+              <div className="backup-count-item">
+                <span>Payment Methods:</span>
+                <strong>{pendingValidation.counts?.paymentMethods ?? 0}</strong>
+              </div>
+              <div className="backup-count-item">
+                <span>Obligations:</span>
+                <strong>{pendingValidation.counts?.recurringPayments ?? 0}</strong>
+              </div>
+              <div className="backup-count-item">
+                <span>Loans:</span>
+                <strong>{pendingValidation.counts?.loans ?? 0}</strong>
+              </div>
+              <div className="backup-count-item">
+                <span>Budgets:</span>
+                <strong>{pendingValidation.counts?.monthlySettings ?? 0}</strong>
+              </div>
+            </div>
+
+            <p className="modal-hint-text" style={{ color: '#fbbf24' }}>
+              ⚠️ Tip: If you want to keep your current data, download a backup first before confirming.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleExportBackup}
+                disabled={isRestoring}
+              >
+                Download Current Backup First
+              </button>
+              <div className="modal-actions-row">
+                <button
+                  type="button"
+                  className="btn-modal-cancel"
+                  onClick={() => setPendingRestoreEnvelope(null)}
+                  disabled={isRestoring}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-modal-delete"
+                  onClick={handleConfirmRestore}
+                  disabled={isRestoring}
+                >
+                  {isRestoring ? 'Restoring...' : 'Confirm & Restore'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

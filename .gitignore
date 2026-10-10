@@ -26,3 +26,8 @@ dist-ssr
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Environment variables
+.env
+.env.*
+!.env.example

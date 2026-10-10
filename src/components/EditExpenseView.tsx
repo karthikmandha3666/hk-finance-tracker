@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Expense } from '../types';
 import { expenseRepository } from '../repositories/expenseRepository';
@@ -16,8 +16,9 @@ import {
 interface EditExpenseViewProps {
   expense: Expense;
   onCancel: () => void;
-  onExpenseUpdated?: () => void;
+  onExpenseUpdated?: (updatedExpense?: Expense) => void;
   onExpenseDeleted?: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
@@ -25,6 +26,7 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
   onCancel,
   onExpenseUpdated,
   onExpenseDeleted,
+  onDirtyChange,
 }) => {
   // Live queries for active categories and payment methods
   const activeCategories = useLiveQuery(() => categoryRepository.getActiveCategories()) ?? [];
@@ -82,6 +84,33 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const initialAmount = useMemo(() => paiseToRupeesInput(expense.amountInPaise), [expense.amountInPaise]);
+
+  useEffect(() => {
+    const isDirty =
+      amount !== initialAmount ||
+      note !== (expense.note || '') ||
+      date !== expense.date ||
+      selectedCategory !== expense.category ||
+      selectedPayment !== expense.paymentMethod;
+    onDirtyChange?.(isDirty);
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [
+    amount,
+    initialAmount,
+    note,
+    expense.note,
+    date,
+    expense.date,
+    selectedCategory,
+    expense.category,
+    selectedPayment,
+    expense.paymentMethod,
+    onDirtyChange,
+  ]);
 
   const handleDateChange = (val: string) => {
     setDate(val);
@@ -190,7 +219,7 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
       await expenseRepository.updateExpense(updatedExpense);
 
       if (onExpenseUpdated) {
-        onExpenseUpdated();
+        onExpenseUpdated(updatedExpense);
       }
       onCancel();
     } catch (err) {

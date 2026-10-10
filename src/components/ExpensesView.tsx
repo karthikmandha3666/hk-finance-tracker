@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Expense, MonthData } from '../types';
 import { MonthSelector } from './MonthSelector';
@@ -107,6 +107,16 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   const [expensePendingDelete, setExpensePendingDelete] = useState<Expense | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Reset filters when navigating across months to make ledger behavior clear and predictable (MAS-12)
+  const prevMonthRef = useRef(selectedMonthId);
+  useEffect(() => {
+    if (prevMonthRef.current !== selectedMonthId) {
+      prevMonthRef.current = selectedMonthId;
+      setSelectedCategoryFilter('');
+      setSelectedMethodFilter('');
+    }
+  }, [selectedMonthId]);
 
   // Available categories & payment methods for filter dropdowns
   const activeCategories = useLiveQuery(() => categoryRepository.getActiveCategories()) ?? [];

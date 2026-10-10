@@ -353,4 +353,68 @@ describe('ExpensesView filter visibility and clearing behavior (DEF-04)', () => 
     items = container.querySelectorAll('.expense-ledger-item');
     expect(items.length).toBe(3);
   });
+
+  it('MAS-12: automatically resets active filters when navigating across months', async () => {
+    const expenses: Expense[] = [
+      {
+        id: 'exp-1',
+        amountInPaise: 10000,
+        category: 'Food',
+        paymentMethod: 'UPI',
+        date: '2026-10-01',
+        note: '',
+        currency: 'INR',
+        createdAt: '2026-10-01T10:00:00.000Z',
+        updatedAt: '2026-10-01T10:00:00.000Z',
+      },
+    ];
+
+    await act(async () => {
+      root.render(
+        <ExpensesView
+          months={[
+            { id: '2026-10', label: 'October 2026', shortLabel: 'Oct 2026', isCurrentMonth: true },
+            { id: '2026-09', label: 'September 2026', shortLabel: 'Sep 2026', isCurrentMonth: false },
+          ]}
+          selectedMonthId="2026-10"
+          onSelectMonth={vi.fn()}
+          expenses={expenses}
+          onAddExpenseClick={vi.fn()}
+          onEditExpense={vi.fn()}
+        />
+      );
+    });
+
+    const categorySelect = container.querySelector('#filter-category-select') as HTMLSelectElement;
+
+    // Apply a category filter
+    await act(async () => {
+      categorySelect.value = 'Food';
+      categorySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(categorySelect.value).toBe('Food');
+    expect(container.querySelector('.active-filters-banner')).not.toBeNull();
+
+    // Re-render with new selectedMonthId (simulating user selecting September)
+    await act(async () => {
+      root.render(
+        <ExpensesView
+          months={[
+            { id: '2026-10', label: 'October 2026', shortLabel: 'Oct 2026', isCurrentMonth: false },
+            { id: '2026-09', label: 'September 2026', shortLabel: 'Sep 2026', isCurrentMonth: true },
+          ]}
+          selectedMonthId="2026-09"
+          onSelectMonth={vi.fn()}
+          expenses={[]}
+          onAddExpenseClick={vi.fn()}
+          onEditExpense={vi.fn()}
+        />
+      );
+    });
+
+    // Verify filters are automatically cleared
+    const updatedSelect = container.querySelector('#filter-category-select') as HTMLSelectElement;
+    expect(updatedSelect.value).toBe('');
+    expect(container.querySelector('.active-filters-banner')).toBeNull();
+  });
 });

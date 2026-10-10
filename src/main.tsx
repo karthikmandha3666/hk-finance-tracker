@@ -5,11 +5,18 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 import { registerSW } from 'virtual:pwa-register';
 
-// Register service worker for offline PWA support
-registerSW({
+// Register service worker for offline PWA support and accessible update dispatch
+const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
     console.info('[PWA] New content available.');
+    window.dispatchEvent(
+      new CustomEvent('spendly-pwa-update', {
+        detail: {
+          updateSW: () => updateSW(true),
+        },
+      })
+    );
   },
   onOfflineReady() {
     console.info('[PWA] Application ready to work offline.');

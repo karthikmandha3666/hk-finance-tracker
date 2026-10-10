@@ -72,12 +72,45 @@ export const App: React.FC = () => {
   const monthlyIncomePaise = currentSettings?.incomeInPaise ?? null;
   const monthlyBudgetPaise = currentSettings?.budgetInPaise ?? null;
 
+  // Accessible PWA Update Notification Listener (MAS-10)
+  const [pwaUpdateAvailable, setPwaUpdateAvailable] = useState<boolean>(false);
+  const [updateSWHandler, setUpdateSWHandler] = useState<(() => void) | null>(null);
+
+  useEffect(() => {
+    const handleUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<{ updateSW?: () => void }>;
+      setPwaUpdateAvailable(true);
+      if (customEvent.detail?.updateSW) {
+        setUpdateSWHandler(() => customEvent.detail.updateSW);
+      }
+    };
+    window.addEventListener('spendly-pwa-update', handleUpdate);
+    return () => window.removeEventListener('spendly-pwa-update', handleUpdate);
+  }, []);
+
+  // Form dirty state and safe navigation guard (MAS-04)
+  const [isFormDirty, setIsFormDirty] = useState<boolean>(false);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState<boolean>(false);
+
+  const confirmOrNavigate = (navigateFn: () => void) => {
+    if (isFormDirty) {
+      setPendingNavigation(() => navigateFn);
+      setShowDiscardConfirm(true);
+      return;
+    }
+    navigateFn();
+  };
+
   const handleTabChange = (tab: Tab) => {
-    setEditingExpense(null);
-    setViewingUpcoming(false);
-    setViewingLoans(false);
-    setActiveTab(tab);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    confirmOrNavigate(() => {
+      setIsFormDirty(false);
+      setEditingExpense(null);
+      setViewingUpcoming(false);
+      setViewingLoans(false);
+      setActiveTab(tab);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
   };
 
   const handleSaveFinancialValue = async (valInPaise: number | null) => {
@@ -93,6 +126,41 @@ export const App: React.FC = () => {
       {/* App Ambient Glow */}
       <div className="ambient-glow" aria-hidden="true" />
 
+      {/* Accessible PWA Update Notification Banner (MAS-10) */}
+      {pwaUpdateAvailable && (
+        <div className="pwa-update-banner" role="alert" aria-live="polite">
+          <div className="pwa-update-text">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+            </svg>
+            <span>Update available! Reload to run the latest version.</span>
+          </div>
+          <div className="pwa-update-actions">
+            <button
+              type="button"
+              className="btn-pwa-update"
+              onClick={() => {
+                if (updateSWHandler) {
+                  updateSWHandler();
+                } else {
+                  window.location.reload();
+                }
+              }}
+            >
+              Update
+            </button>
+            <button
+              type="button"
+              className="btn-pwa-dismiss"
+              onClick={() => setPwaUpdateAvailable(false)}
+              aria-label="Dismiss update alert"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Spendly Initial Splash / Brand Screen */}
       {showSplash && (
         <SplashScreen
@@ -104,16 +172,44 @@ export const App: React.FC = () => {
       {/* Main App Container */}
       <div className="app-frame">
         {/* Top Header - Spendly branding */}
-        <Header onAddClick={() => { setEditingExpense(null); setViewingUpcoming(false); setViewingLoans(false); handleTabChange('add'); }} />
+        <Header
+          onAddClick={() => {
+            confirmOrNavigate(() => {
+              setIsFormDirty(false);
+              setEditingExpense(null);
+              setViewingUpcoming(false);
+              setViewingLoans(false);
+              setActiveTab('add');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+          }}
+        />
 
         {/* Dynamic Content Views */}
         <main className="content-area">
           {editingExpense ? (
             <EditExpenseView
               expense={editingExpense}
-              onCancel={() => setEditingExpense(null)}
-              onExpenseUpdated={() => setEditingExpense(null)}
-              onExpenseDeleted={() => setEditingExpense(null)}
+              onDirtyChange={setIsFormDirty}
+              onCancel={() => {
+                setIsFormDirty(false);
+                setEditingExpense(null);
+              }}
+              onExpenseUpdated={(updated) => {
+                setIsFormDirty(false);
+                setEditingExpense(null);
+                if (updated && updated.date) {
+                  const targetMonthId = updated.date.slice(0, 7);
+                  if (targetMonthId !== selectedMonthId) {
+                    setSelectedMonthId(targetMonthId);
+                    setActiveTab('expenses');
+                  }
+                }
+              }}
+              onExpenseDeleted={() => {
+                setIsFormDirty(false);
+                setEditingExpense(null);
+              }}
             />
           ) : viewingUpcoming ? (
             <UpcomingPaymentsView
@@ -157,9 +253,19 @@ export const App: React.FC = () => {
 
               {activeTab === 'add' && (
                 <AddExpenseView
-                  onCancel={() => handleTabChange('home')}
-                  onExpenseAdded={() => handleTabChange('home')}
-                  onNavigateToSettings={() => handleTabChange('more')}
+                  onDirtyChange={setIsFormDirty}
+                  onCancel={() => {
+                    setIsFormDirty(false);
+                    handleTabChange('home');
+                  }}
+                  onExpenseAdded={() => {
+                    setIsFormDirty(false);
+                    handleTabChange('home');
+                  }}
+                  onNavigateToSettings={() => {
+                    setIsFormDirty(false);
+                    handleTabChange('more');
+                  }}
                 />
               )}
 
@@ -219,6 +325,77 @@ export const App: React.FC = () => {
           onSave={handleSaveFinancialValue}
           onClose={() => setEditingType(null)}
         />
+
+        {/* Discard Unsaved Changes Modal (MAS-04) */}
+        {showDiscardConfirm && (
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setShowDiscardConfirm(false);
+              setPendingNavigation(null);
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-card"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="discard-form-modal-title"
+            >
+              <div className="modal-header">
+                <div className="modal-title-group">
+                  <h3 id="discard-form-modal-title" className="modal-title">Discard Unsaved Form?</h3>
+                </div>
+                <button
+                  type="button"
+                  className="modal-close-btn"
+                  onClick={() => {
+                    setShowDiscardConfirm(false);
+                    setPendingNavigation(null);
+                  }}
+                  aria-label="Close dialog"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+
+              <p className="modal-desc">
+                You have unsaved details in your form. If you navigate away now, your entered data will be discarded.
+              </p>
+
+              <div className="modal-actions-row">
+                <button
+                  type="button"
+                  className="btn-modal-cancel"
+                  onClick={() => {
+                    setShowDiscardConfirm(false);
+                    setPendingNavigation(null);
+                  }}
+                >
+                  Keep Editing
+                </button>
+                <button
+                  type="button"
+                  className="btn-modal-delete"
+                  onClick={() => {
+                    setShowDiscardConfirm(false);
+                    setIsFormDirty(false);
+                    if (pendingNavigation) {
+                      pendingNavigation();
+                      setPendingNavigation(null);
+                    }
+                  }}
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
