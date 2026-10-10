@@ -35,6 +35,23 @@ function validateCategoryName(name: string): string {
   return trimmed;
 }
 
+/**
+ * Canonical deterministic category sorting rule shared across all views (web, mobile, settings).
+ * Sorts case-insensitively by name with numeric collation support, ensuring consistent
+ * alphabetical placement regardless of IndexedDB insertion order or UUID generation.
+ */
+export function sortCategoriesDeterministic<T extends { name: string }>(categories: T[]): T[] {
+  return [...categories].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+  );
+}
+
+export function sortCategoryNamesDeterministic(names: string[]): string[] {
+  return [...names].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true })
+  );
+}
+
 export const categoryRepository = {
   /**
    * Idempotently seeds default categories if none exist in the database.
@@ -68,18 +85,20 @@ export const categoryRepository = {
   },
 
   /**
-   * Retrieves all categories (both active and inactive).
+   * Retrieves all categories (both active and inactive), deterministically sorted.
    */
   async getCategories(): Promise<Category[]> {
-    return db.categories.toArray();
+    const all = await db.categories.toArray();
+    return sortCategoriesDeterministic(all);
   },
 
   /**
-   * Retrieves only active categories.
+   * Retrieves only active categories, deterministically sorted.
    */
   async getActiveCategories(): Promise<Category[]> {
     const all = await db.categories.toArray();
-    return all.filter((cat) => cat.isActive);
+    const active = all.filter((cat) => cat.isActive);
+    return sortCategoriesDeterministic(active);
   },
 
   /**

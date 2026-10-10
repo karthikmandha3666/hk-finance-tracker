@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Expense, MonthData } from '../types';
 import { MonthSelector } from './MonthSelector';
 import { expenseRepository } from '../repositories/expenseRepository';
-import { categoryRepository } from '../repositories/categoryRepository';
+import { categoryRepository, sortCategoryNamesDeterministic } from '../repositories/categoryRepository';
 import { paymentMethodRepository } from '../repositories/paymentMethodRepository';
 import { formatPaiseToRupees, sumExpenses } from '../utils/finance';
 
@@ -126,7 +126,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   const availableCategories = useMemo(() => {
     const fromExpenses = Array.from(new Set(expenses.map((e) => e.category))).filter(Boolean);
     const fromConfig = activeCategories.map((c) => c.name);
-    return Array.from(new Set([...fromExpenses, ...fromConfig])).sort();
+    return sortCategoryNamesDeterministic(Array.from(new Set([...fromExpenses, ...fromConfig])));
   }, [expenses, activeCategories]);
 
   const availableMethods = useMemo(() => {

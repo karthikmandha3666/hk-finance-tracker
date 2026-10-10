@@ -20,10 +20,33 @@ import { categoryRepository } from './repositories/categoryRepository';
 import { paymentMethodRepository } from './repositories/paymentMethodRepository';
 import { getLocalCurrentMonthId } from './utils/finance';
 
+export const SELECTED_MONTH_STORAGE_KEY = 'spendly_selected_month_id';
+
+const getInitialSelectedMonthId = (): string => {
+  try {
+    const saved = localStorage.getItem(SELECTED_MONTH_STORAGE_KEY);
+    if (saved && /^\d{4}-\d{2}$/.test(saved)) {
+      return saved;
+    }
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+  return getLocalCurrentMonthId();
+};
+
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('home');
-  // Dynamically initialize to current local client month (no hardcoded '2026-10')
-  const [selectedMonthId, setSelectedMonthId] = useState<string>(getLocalCurrentMonthId);
+  // Dynamically initialize to stored or current local client month (no hardcoded '2026-10')
+  const [selectedMonthId, setSelectedMonthId] = useState<string>(getInitialSelectedMonthId);
+
+  const handleSelectMonth = (monthId: string) => {
+    setSelectedMonthId(monthId);
+    try {
+      localStorage.setItem(SELECTED_MONTH_STORAGE_KEY, monthId);
+    } catch {
+      // Ignore storage errors
+    }
+  };
 
   // Startup brand splash screen: visible on full page load / browser refresh / PWA launch
   const [showSplash, setShowSplash] = useState<boolean>(true);
@@ -201,9 +224,9 @@ export const App: React.FC = () => {
                 if (updated && updated.date) {
                   const targetMonthId = updated.date.slice(0, 7);
                   if (targetMonthId !== selectedMonthId) {
-                    setSelectedMonthId(targetMonthId);
-                    setActiveTab('expenses');
+                    handleSelectMonth(targetMonthId);
                   }
+                  setActiveTab('expenses');
                 }
               }}
               onExpenseDeleted={() => {
@@ -234,7 +257,7 @@ export const App: React.FC = () => {
                   monthlyIncomePaise={monthlyIncomePaise}
                   monthlyBudgetPaise={monthlyBudgetPaise}
                   expenses={expenses}
-                  onSelectMonth={setSelectedMonthId}
+                  onSelectMonth={handleSelectMonth}
                   onOpenEditIncome={() => setEditingType('income')}
                   onOpenEditBudget={() => setEditingType('budget')}
                   onAddExpenseClick={() => handleTabChange('add')}
@@ -256,15 +279,22 @@ export const App: React.FC = () => {
                   onDirtyChange={setIsFormDirty}
                   onCancel={() => {
                     setIsFormDirty(false);
-                    handleTabChange('home');
+                    setActiveTab('home');
                   }}
-                  onExpenseAdded={() => {
+                  onExpenseAdded={(newExpense) => {
                     setIsFormDirty(false);
-                    handleTabChange('home');
+                    if (newExpense && newExpense.date) {
+                      const targetMonthId = newExpense.date.slice(0, 7);
+                      if (targetMonthId !== selectedMonthId) {
+                        handleSelectMonth(targetMonthId);
+                      }
+                    }
+                    setActiveTab('home');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   onNavigateToSettings={() => {
                     setIsFormDirty(false);
-                    handleTabChange('more');
+                    setActiveTab('more');
                   }}
                 />
               )}
@@ -287,7 +317,7 @@ export const App: React.FC = () => {
                 <ExpensesView
                   months={INITIAL_MONTHS}
                   selectedMonthId={selectedMonthId}
-                  onSelectMonth={setSelectedMonthId}
+                  onSelectMonth={handleSelectMonth}
                   expenses={expenses}
                   onAddExpenseClick={() => handleTabChange('add')}
                   onEditExpense={(item) => setEditingExpense(item)}
@@ -298,7 +328,7 @@ export const App: React.FC = () => {
                 <BudgetsView
                   months={INITIAL_MONTHS}
                   selectedMonthId={selectedMonthId}
-                  onSelectMonth={setSelectedMonthId}
+                  onSelectMonth={handleSelectMonth}
                   monthlyIncomePaise={monthlyIncomePaise}
                   monthlyBudgetPaise={monthlyBudgetPaise}
                   expenses={expenses}

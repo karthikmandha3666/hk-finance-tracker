@@ -44,18 +44,37 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
+  touch-action: pan-x pan-y;
 }
 
-/* Scope non-selection to interactive controls only */
+/* Prevent background body scroll when a modal dialog is open */
+body:has(.modal-backdrop) {
+  overflow: hidden;
+}
+
+/* Scope non-selection and native touch handling to interactive controls */
 button,
+a,
+input,
+select,
+textarea,
 .nav-item,
 .category-chip,
 .payment-chip,
+.frequency-chip,
+.loan-type-chip,
 .btn-primary-add,
 .btn-empty-add,
 .month-nav-btn {
   user-select: none;
   -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* App Shell Layout */
@@ -67,6 +86,7 @@ button,
   display: flex;
   justify-content: center;
   position: relative;
+  overflow-x: clip;
 }
 
 .ambient-glow {
@@ -1209,7 +1229,7 @@ button,
 /* Category Chips Grid */
 .category-chips-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -1224,6 +1244,10 @@ button,
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .category-chip.selected {
@@ -1236,7 +1260,7 @@ button,
 /* Payment Chips Grid */
 .payment-chips-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -1251,6 +1275,10 @@ button,
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .payment-chip.selected {
@@ -1260,18 +1288,20 @@ button,
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
 }
 
-/* Generic Form Input */
+/* Generic Form Input - 16px minimum font size prevents iOS Safari auto-zoom on focus */
 .form-input {
   width: 100%;
+  min-height: 44px;
   padding: 12px 14px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   color: var(--text-primary);
-  font-size: 0.88rem;
+  font-size: 16px;
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s ease;
+  box-sizing: border-box;
 }
 
 .form-input:focus {
@@ -1314,6 +1344,49 @@ button,
 
 .stage-info-box svg {
   flex-shrink: 0;
+}
+
+/* Save Error Alert Box */
+.save-error-box {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #fda4af;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.save-error-box p {
+  margin: 0;
+  flex: 1;
+}
+
+.btn-retry-save {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(244, 63, 94, 0.2);
+  border: 1px solid rgba(244, 63, 94, 0.5);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-retry-save:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.35);
+  border-color: #fb7185;
+}
+
+.btn-retry-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Form Actions */
@@ -1387,12 +1460,20 @@ button,
   align-items: center;
   justify-content: center;
   padding: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   animation: fadeIn 0.15s ease-out;
 }
 
 .modal-card {
   width: 100%;
   max-width: 380px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   background: #0f172a;
   border: 1px solid var(--border-medium);
   border-radius: 20px;
@@ -1402,6 +1483,7 @@ button,
   flex-direction: column;
   gap: 12px;
   animation: slideUp 0.15s ease-out;
+  box-sizing: border-box;
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -1645,9 +1727,10 @@ button,
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--border-subtle);
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: center;
   z-index: 30;
+  box-sizing: border-box;
 }
 
 .nav-item {
@@ -1662,6 +1745,9 @@ button,
   cursor: pointer;
   padding: 6px 0;
   transition: color 0.15s ease;
+  min-width: 0;
+  overflow: hidden;
+  touch-action: manipulation;
 }
 
 .nav-item.active {
@@ -1672,6 +1758,11 @@ button,
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 2px;
 }
 
 .nav-add-wrapper {
@@ -1705,17 +1796,17 @@ button,
 }
 
 /* Media Queries for Small Mobile Screens */
-@media (max-width: 375px) {
+@media (max-width: 390px) {
   .planning-cards-grid {
     grid-template-columns: 1fr;
   }
   
   .category-chips-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   
   .payment-chips-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   
   .amount-number {
@@ -2657,8 +2748,14 @@ button,
 
 .frequency-chips-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+
+@media (min-width: 440px) {
+  .frequency-chips-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .frequency-chip {
@@ -2673,6 +2770,9 @@ button,
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .frequency-chip:hover {
@@ -2690,7 +2790,7 @@ button,
 .category-chips-grid.mini,
 .payment-chips-grid.mini {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   max-height: 140px;
   overflow-y: auto;
@@ -2707,14 +2807,14 @@ button,
 }
 
 /* Small mobile responsiveness */
-@media (max-width: 390px) {
+@media (max-width: 440px) {
   .frequency-chips-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .category-chips-grid.mini,
   .payment-chips-grid.mini {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .upcoming-home-item {
@@ -2746,6 +2846,12 @@ button,
 
   .btn-add-upcoming {
     justify-content: center;
+  }
+}
+
+@media (max-width: 340px) {
+  .frequency-chips-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2796,7 +2902,7 @@ button,
 
 .loans-home-card {
   display: grid;
-  grid-template-columns: 1fr auto 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -2804,6 +2910,8 @@ button,
   padding: 14px 16px;
   cursor: pointer;
   transition: all 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .loans-home-card:hover {
@@ -2816,6 +2924,8 @@ button,
   flex-direction: column;
   gap: 4px;
   text-align: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .loans-home-stat-label {
@@ -2824,12 +2934,18 @@ button,
   text-transform: uppercase;
   color: var(--text-muted);
   letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .loans-home-stat-val {
   font-size: 0.95rem;
   font-weight: 800;
   color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .loans-home-divider {
@@ -3315,18 +3431,25 @@ button,
   }
 }
 
-@media (max-width: 390px) {
+@media (max-width: 440px) {
   .loans-summary-hero {
     grid-template-columns: 1fr;
   }
 
   .loans-home-card {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 10px;
   }
 
   .loans-home-divider {
     display: none;
+  }
+
+  .loans-home-stat {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
   }
 
   .loan-metrics-grid {
@@ -3334,7 +3457,7 @@ button,
   }
 
   .loan-type-chips-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .form-row-2 {
@@ -3922,20 +4045,23 @@ button,
 .expenses-filter-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-radius: var(--radius-md, 12px);
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--border-subtle);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 .filter-group {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1;
-  min-width: 130px;
+  flex: 1 1 120px;
+  min-width: 0;
 }
 
 .filter-label {
@@ -3950,16 +4076,18 @@ button,
 .filter-select {
   flex: 1;
   min-width: 0;
-  height: 38px;
+  width: 100%;
+  height: 42px;
   padding: 0 10px;
   border-radius: 8px;
   background: rgba(11, 17, 32, 0.8);
   border: 1px solid var(--border-medium);
   color: var(--text-primary);
-  font-size: 0.8rem;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   outline: none;
+  box-sizing: border-box;
 }
 
 .filter-select:focus-visible {
@@ -4529,9 +4657,20 @@ button,
   min-height: 44px;
 }
 
-@media (max-width: 380px) {
+@media (max-width: 420px) {
   .budget-summary-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Universal iOS Safari Auto-Zoom Prevention (requires >= 16px font-size to prevent focus zoom) */
+@media screen and (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea,
+  .form-input,
+  .filter-select {
+    font-size: 16px !important;
   }
 }
 

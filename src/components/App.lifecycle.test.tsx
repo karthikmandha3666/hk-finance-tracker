@@ -17,6 +17,8 @@ vi.mock('../repositories/categoryRepository', () => ({
     getActiveCategories: vi.fn().mockResolvedValue([]),
     getCategories: vi.fn().mockResolvedValue([]),
   },
+  sortCategoriesDeterministic: (cats: any[]) => cats,
+  sortCategoryNamesDeterministic: (names: any[]) => names,
 }));
 
 vi.mock('../repositories/paymentMethodRepository', () => ({

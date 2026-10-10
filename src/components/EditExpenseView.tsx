@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Expense } from '../types';
 import { expenseRepository } from '../repositories/expenseRepository';
-import { categoryRepository } from '../repositories/categoryRepository';
+import { categoryRepository, sortCategoriesDeterministic } from '../repositories/categoryRepository';
 import { paymentMethodRepository } from '../repositories/paymentMethodRepository';
 import {
   rupeesToPaise,
@@ -47,7 +47,7 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
         isInactive: true,
       });
     }
-    return options;
+    return sortCategoriesDeterministic(options);
   }, [activeCategories, expense.category]);
 
   // Build payment method choices: active payment methods + historical method if inactive/missing
@@ -190,8 +190,10 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
     selectedCategory.trim() !== '' &&
     selectedPayment.trim() !== '';
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
     if (!isValidCalendarDate(date)) {
       setDateError('Please enter a valid calendar date in YYYY-MM-DD format.');
       return;
@@ -218,19 +220,24 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
 
       await expenseRepository.updateExpense(updatedExpense);
 
+      // Mark form clean synchronously before notifying parent
+      onDirtyChange?.(false);
+
       if (onExpenseUpdated) {
         onExpenseUpdated(updatedExpense);
+      } else {
+        onCancel();
       }
-      onCancel();
     } catch (err) {
       console.error('Failed to update expense in IndexedDB:', err);
       setSaveError('Unable to update expense. Please try again.');
+    } finally {
       setIsSaving(false);
     }
   };
 
   const handleConfirmDelete = async () => {
-    if (isDeleting) return;
+    if (isDeleting || isSaving) return;
 
     setIsDeleting(true);
     setDeleteError(null);
@@ -239,15 +246,25 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
       await expenseRepository.deleteExpense(expense.id);
       setShowDeleteConfirm(false);
 
+      // Mark form clean synchronously before notifying parent
+      onDirtyChange?.(false);
+
       if (onExpenseDeleted) {
         onExpenseDeleted();
+      } else {
+        onCancel();
       }
-      onCancel();
     } catch (err) {
       console.error('Failed to delete expense from IndexedDB:', err);
       setDeleteError('Unable to delete expense. Please try again.');
+    } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleCancel = () => {
+    if (isSaving || isDeleting) return;
+    onCancel();
   };
 
   return (
@@ -257,7 +274,7 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
         <button
           type="button"
           className="btn-icon-back"
-          onClick={onCancel}
+          onClick={handleCancel}
           aria-label="Back to Home"
           disabled={isSaving || isDeleting}
         >
@@ -315,21 +332,27 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
         {/* Category Selector Grid */}
         <div className="form-group">
           <label className="form-label">Category</label>
-          <div className="category-chips-grid">
-            {categoryOptions.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                className={`category-chip ${selectedCategory === cat.name ? 'selected' : ''} ${cat.isInactive ? 'chip-inactive' : ''}`}
-                onClick={() => setSelectedCategory(cat.name)}
-                title={cat.name}
-                disabled={isSaving || isDeleting}
-              >
-                {cat.name}
-                {cat.isInactive && <span className="chip-inactive-indicator"> (Inactive)</span>}
-              </button>
-            ))}
-          </div>
+          {categoryOptions.length === 0 ? (
+            <div className="empty-chips-notice" role="alert">
+              <p>No categories available.</p>
+            </div>
+          ) : (
+            <div className="category-chips-grid">
+              {categoryOptions.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`category-chip ${selectedCategory === cat.name ? 'selected' : ''} ${cat.isInactive ? 'chip-inactive' : ''}`}
+                  onClick={() => setSelectedCategory(cat.name)}
+                  title={cat.name}
+                  disabled={isSaving || isDeleting}
+                >
+                  {cat.name}
+                  {cat.isInactive && <span className="chip-inactive-indicator"> (Inactive)</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Date Selector */}
@@ -353,21 +376,27 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
         {/* Payment Method Selector */}
         <div className="form-group">
           <label className="form-label">Payment Method</label>
-          <div className="payment-chips-grid">
-            {paymentMethodOptions.map((method) => (
-              <button
-                key={method.id}
-                type="button"
-                className={`payment-chip ${selectedPayment === method.name ? 'selected' : ''} ${method.isInactive ? 'chip-inactive' : ''}`}
-                onClick={() => setSelectedPayment(method.name)}
-                title={method.name}
-                disabled={isSaving || isDeleting}
-              >
-                {method.name}
-                {method.isInactive && <span className="chip-inactive-indicator"> (Inactive)</span>}
-              </button>
-            ))}
-          </div>
+          {paymentMethodOptions.length === 0 ? (
+            <div className="empty-chips-notice" role="alert">
+              <p>No payment methods available.</p>
+            </div>
+          ) : (
+            <div className="payment-chips-grid">
+              {paymentMethodOptions.map((method) => (
+                <button
+                  key={method.id}
+                  type="button"
+                  className={`payment-chip ${selectedPayment === method.name ? 'selected' : ''} ${method.isInactive ? 'chip-inactive' : ''}`}
+                  onClick={() => setSelectedPayment(method.name)}
+                  title={method.name}
+                  disabled={isSaving || isDeleting}
+                >
+                  {method.name}
+                  {method.isInactive && <span className="chip-inactive-indicator"> (Inactive)</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Optional Note Field (Max 120 chars) */}
@@ -387,15 +416,31 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
           />
         </div>
 
-        {/* Save / Delete Error Notice */}
+        {/* Save / Delete Error Notice with Retry */}
         {saveError && (
           <div className="save-error-box" role="alert">
             <p>{saveError}</p>
+            <button
+              type="button"
+              className="btn-retry-save"
+              onClick={() => handleSubmit()}
+              disabled={isSaving || isDeleting}
+            >
+              Retry Save
+            </button>
           </div>
         )}
         {deleteError && (
           <div className="save-error-box" role="alert">
             <p>{deleteError}</p>
+            <button
+              type="button"
+              className="btn-retry-save"
+              onClick={() => handleConfirmDelete()}
+              disabled={isSaving || isDeleting}
+            >
+              Retry Delete
+            </button>
           </div>
         )}
 
@@ -404,7 +449,7 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
           <button
             type="button"
             className="btn-secondary"
-            onClick={onCancel}
+            onClick={handleCancel}
             disabled={isSaving || isDeleting}
           >
             Cancel

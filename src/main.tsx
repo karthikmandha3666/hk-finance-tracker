@@ -23,6 +23,22 @@ const updateSW = registerSW({
   },
 });
 
+// Explicitly prevent pinch-to-zoom and gesture zooming on iOS Safari
+if (typeof document !== 'undefined') {
+  document.addEventListener('gesturestart', (e: Event) => e.preventDefault(), { passive: false });
+  document.addEventListener('gesturechange', (e: Event) => e.preventDefault(), { passive: false });
+  document.addEventListener('gestureend', (e: Event) => e.preventDefault(), { passive: false });
+  document.addEventListener(
+    'touchmove',
+    (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    },
+    { passive: false }
+  );
+}
+
 const rootElement = document.getElementById('root');
 if (rootElement) {
   ReactDOM.createRoot(rootElement).render(

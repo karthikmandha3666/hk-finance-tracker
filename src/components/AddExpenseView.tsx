@@ -15,7 +15,7 @@ import { generateUUID } from '../utils/uuid';
 
 interface AddExpenseViewProps {
   onCancel: () => void;
-  onExpenseAdded?: () => void;
+  onExpenseAdded?: (newExpense?: Expense) => void;
   onNavigateToSettings?: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
 }
@@ -135,8 +135,10 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
     effectiveCategory !== '' &&
     effectivePayment !== '';
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
     if (!isValidCalendarDate(date)) {
       setDateError('Please enter a valid calendar date in YYYY-MM-DD format.');
       return;
@@ -172,16 +174,26 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
       setSelectedCategory('');
       setSelectedPayment('');
 
-      // Notify parent & return to Home
+      // Mark form clean synchronously before notifying parent
+      onDirtyChange?.(false);
+
+      // Notify parent & return to Home (do not call onCancel if onExpenseAdded handles navigation)
       if (onExpenseAdded) {
-        onExpenseAdded();
+        onExpenseAdded(newExpense);
+      } else {
+        onCancel();
       }
-      onCancel();
     } catch (err) {
       console.error('Failed to save expense to IndexedDB:', err);
       setSaveError('Unable to save expense to local storage. Please try again.');
+    } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleCancel = () => {
+    if (isSaving) return;
+    onCancel();
   };
 
   return (
@@ -191,8 +203,9 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
         <button
           type="button"
           className="btn-icon-back"
-          onClick={onCancel}
+          onClick={handleCancel}
           aria-label="Back to Home"
+          disabled={isSaving}
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
@@ -218,6 +231,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
               value={amount}
               size={Math.max(4, (amount || '0.00').length + 1)}
               onChange={handleAmountChange}
+              disabled={isSaving}
             />
           </div>
 
@@ -239,6 +253,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
                   type="button"
                   className="btn-link-settings"
                   onClick={onNavigateToSettings}
+                  disabled={isSaving}
                 >
                   Manage Categories in Settings &rarr;
                 </button>
@@ -253,6 +268,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
                   className={`category-chip ${effectiveCategory === cat.name ? 'selected' : ''}`}
                   onClick={() => setSelectedCategory(cat.name)}
                   title={cat.name}
+                  disabled={isSaving}
                 >
                   {cat.name}
                 </button>
@@ -270,6 +286,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
             className={`form-input date-input ${dateError ? 'input-error' : ''}`}
             value={date}
             onChange={(e) => handleDateChange(e.target.value)}
+            disabled={isSaving}
           />
           {dateError && (
             <p className="form-validation-msg" role="alert">
@@ -289,6 +306,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
                   type="button"
                   className="btn-link-settings"
                   onClick={onNavigateToSettings}
+                  disabled={isSaving}
                 >
                   Manage Payment Methods in Settings &rarr;
                 </button>
@@ -303,6 +321,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
                   className={`payment-chip ${effectivePayment === method.name ? 'selected' : ''}`}
                   onClick={() => setSelectedPayment(method.name)}
                   title={method.name}
+                  disabled={isSaving}
                 >
                   {method.name}
                 </button>
@@ -324,13 +343,22 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
             maxLength={120}
             value={note}
             onChange={(e) => setNote(e.target.value)}
+            disabled={isSaving}
           />
         </div>
 
-        {/* Save Error Notice */}
+        {/* Save Error Notice with Retry */}
         {saveError && (
           <div className="save-error-box" role="alert">
             <p>{saveError}</p>
+            <button
+              type="button"
+              className="btn-retry-save"
+              onClick={() => handleSubmit()}
+              disabled={isSaving}
+            >
+              Retry
+            </button>
           </div>
         )}
 
@@ -339,7 +367,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
           <button
             type="button"
             className="btn-secondary"
-            onClick={onCancel}
+            onClick={handleCancel}
             disabled={isSaving}
           >
             Cancel

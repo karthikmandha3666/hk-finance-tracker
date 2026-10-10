@@ -146,6 +146,9 @@ export const paiseToRupeesInput = (paise: number | null): string => {
  * Uses local calendar dates to avoid timezone shifts.
  */
 export const getDifferenceInCalendarDays = (dateStr1: string, dateStr2: string): number => {
+  if (!dateStr1 || !dateStr2 || typeof dateStr1 !== 'string' || typeof dateStr2 !== 'string') {
+    return 0;
+  }
   const [y1, m1, d1] = dateStr1.split('-').map(Number);
   const [y2, m2, d2] = dateStr2.split('-').map(Number);
   const t1 = new Date(y1, m1 - 1, d1).getTime();
