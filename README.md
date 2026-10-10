@@ -108,6 +108,32 @@ npm run preview
 
 ---
 
+## Data Management & Portability (Stage 10)
+
+Spendly is local-first, meaning you have 100% control and ownership of your financial records. Under **Settings → Data & Backup**, you can backup, restore, export, and import your data at any time:
+
+### 1. Full JSON Backup & Restore
+- **Export Backup**: Packages all 6 data stores (Expenses, Categories, Payment Methods, Recurring Obligations, Loans/EMIs, and Monthly Income/Budgets) into an envelope JSON file.
+- **Restore from Backup**: Validates the JSON file structure, schema version, and records, prompts with a summary of records to be restored, and performs an atomic database update.
+
+### 2. Export Expenses to CSV (Excel)
+- Generates a clean, RFC-4180 compliant CSV file of all your expense records.
+- Includes UTF-8 Byte Order Mark (`\uFEFF`) so Indian Rupee characters and special notes display properly when opened in **Microsoft Excel**, **Google Sheets**, or **Apple Numbers**.
+- Preserves exact integer paise accuracy converted to two-decimal rupees.
+- Columns: `Date`, `Amount (INR)`, `Category`, `Payment Method`, `Note`.
+
+### 3. Import Expenses from CSV
+- Easily import historical expenses from other apps or bank spreadsheets.
+- **Required Columns**: `Date` (YYYY-MM-DD), `Amount` (positive number), `Category`, `Payment Method`.
+- **Optional Column**: `Note`.
+- **Interactive Import Preview**:
+  - Displays count of valid records, duplicate warnings, and invalid rows.
+  - Automatically identifies duplicates matching existing transactions (by Date, Amount, Category, Payment Method, Note).
+  - Offers one-click **Import Unique Only** or **Import All** options.
+  - Automatically registers any new categories or payment methods so they immediately appear across filters and forms.
+
+---
+
 ## License
 
 MIT License. Designed and engineered by Karthik Mandha.

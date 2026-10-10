@@ -13,6 +13,15 @@ import {
   BackupDataEnvelope,
   ValidationResult,
 } from '../utils/backup';
+import {
+  exportExpensesToCsv,
+  downloadCsvFile,
+  parseExpensesCsv,
+  detectDuplicateExpenses,
+  importExpensesToDatabase,
+  CsvParseResult,
+  DuplicateDetectionResult,
+} from '../utils/csv';
 import { db } from '../db/db';
 
 interface SettingsViewProps {
@@ -37,6 +46,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [pendingValidation, setPendingValidation] = useState<ValidationResult | null>(null);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
+
+  // CSV Export & Import states (Stage 10)
+  const [isExportingCsv, setIsExportingCsv] = useState<boolean>(false);
+  const [pendingCsvResult, setPendingCsvResult] = useState<CsvParseResult | null>(null);
+  const [pendingDuplicateCheck, setPendingDuplicateCheck] = useState<DuplicateDetectionResult | null>(null);
+  const [isImportingCsv, setIsImportingCsv] = useState<boolean>(false);
 
   // Modal dialog states
   const [modalMode, setModalMode] = useState<'add-category' | 'rename-category' | 'add-payment' | 'rename-payment' | null>(null);
@@ -64,6 +79,77 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Live queries for navigation hub module summaries
   const upcomingPayments = useLiveQuery(() => recurringPaymentRepository.getUpcomingPayments()) ?? [];
   const activeLoans = useLiveQuery(() => loanRepository.getActiveLoans()) ?? [];
+  const allExpenses = useLiveQuery(() => db.expenses.toArray()) ?? [];
+
+  // Handlers for CSV Export & Import (Stage 10)
+  const handleExportCsv = async () => {
+    setIsExportingCsv(true);
+    setBackupErrorMsg(null);
+    try {
+      const csvContent = exportExpensesToCsv(allExpenses);
+      downloadCsvFile(csvContent);
+      setBackupSuccessMsg(`Exported ${allExpenses.length} expenses to CSV successfully.`);
+      setTimeout(() => setBackupSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('CSV export failed:', err);
+      setBackupErrorMsg('Failed to export expenses to CSV. Please try again.');
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
+  const handleFileSelectForCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBackupErrorMsg(null);
+    setBackupSuccessMsg(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parseResult = parseExpensesCsv(text);
+        if (parseResult.validRows.length === 0 && parseResult.errors.length > 0 && parseResult.totalRows === 0) {
+          setBackupErrorMsg(parseResult.errors[0].reason);
+          return;
+        }
+        const duplicateCheck = detectDuplicateExpenses(parseResult.validRows, allExpenses);
+        setPendingCsvResult(parseResult);
+        setPendingDuplicateCheck(duplicateCheck);
+      } catch (err) {
+        console.error('CSV parse error:', err);
+        setBackupErrorMsg('Failed to read CSV file. Please ensure it is a valid UTF-8 CSV.');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setBackupErrorMsg('Failed to read selected CSV file.');
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmCsvImport = async (importOnlyUnique: boolean) => {
+    if (!pendingCsvResult || !pendingDuplicateCheck || isImportingCsv) return;
+    setIsImportingCsv(true);
+    setBackupErrorMsg(null);
+    try {
+      const rowsToImport = importOnlyUnique
+        ? pendingDuplicateCheck.uniqueRows
+        : pendingCsvResult.validRows;
+      const res = await importExpensesToDatabase(rowsToImport, db);
+      setBackupSuccessMsg(`Successfully imported ${res.importedCount} expenses!`);
+      setPendingCsvResult(null);
+      setPendingDuplicateCheck(null);
+      setTimeout(() => setBackupSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error('CSV import failed:', err);
+      setBackupErrorMsg('Failed to import expenses to database.');
+    } finally {
+      setIsImportingCsv(false);
+    }
+  };
 
   // Handlers for Backup & Restore (MAS-18)
   const handleExportBackup = async () => {
@@ -685,6 +771,71 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 />
               </label>
             </div>
+
+            {/* CSV / Excel Export Card (Stage 10) */}
+            <div className="backup-card">
+              <div className="backup-card-header">
+                <div className="backup-card-icon export" aria-hidden="true" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981' }}>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                </div>
+                <h4 className="backup-card-title">Export to CSV (Excel)</h4>
+              </div>
+              <p className="backup-card-desc">
+                Export all your expenses into a spreadsheet-ready CSV file formatted with UTF-8 BOM so it opens directly in Microsoft Excel, Google Sheets, or Apple Numbers.
+              </p>
+              <button
+                type="button"
+                className="btn-backup-action"
+                onClick={handleExportCsv}
+                disabled={isExportingCsv}
+                style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', color: '#ffffff' }}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>{isExportingCsv ? 'Exporting CSV...' : `Export ${allExpenses.length} Expenses to CSV`}</span>
+              </button>
+            </div>
+
+            {/* CSV Import Card (Stage 10) */}
+            <div className="backup-card">
+              <div className="backup-card-header">
+                <div className="backup-card-icon restore" aria-hidden="true" style={{ background: 'rgba(56, 189, 248, 0.12)', color: 'var(--accent-cyan)' }}>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                  </svg>
+                </div>
+                <h4 className="backup-card-title">Import Expenses from CSV</h4>
+              </div>
+              <p className="backup-card-desc">
+                Import expenses from a CSV file (Date, Amount, Category, Payment Method, Note). Preview rows, validate columns, and check for duplicates before writing.
+              </p>
+              <label className="btn-backup-action restore-select" style={{ background: 'rgba(56, 189, 248, 0.12)', borderColor: 'rgba(56, 189, 248, 0.3)', color: 'var(--accent-cyan)' }}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span>Choose Expenses CSV File</span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleFileSelectForCsvImport}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
           </div>
         </div>
       )}
@@ -983,6 +1134,124 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   {isRestoring ? 'Restoring...' : 'Confirm & Restore'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Preview Modal (Stage 10) */}
+      {pendingCsvResult && pendingDuplicateCheck && (
+        <div
+          className="modal-backdrop"
+          onClick={() => !isImportingCsv && setPendingCsvResult(null)}
+          role="presentation"
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: '480px' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="csv-import-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <h3 id="csv-import-modal-title" className="modal-title">Import Expenses Preview</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => !isImportingCsv && setPendingCsvResult(null)}
+                aria-label="Close dialog"
+                disabled={isImportingCsv}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="modal-desc">
+              Found <strong>{pendingCsvResult.totalRows}</strong> expense rows in the CSV file. Review the validation summary below:
+            </p>
+
+            {/* Validation Counts Summary */}
+            <div className="backup-counts-summary" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              <div className="backup-count-item">
+                <span>Valid to Import:</span>
+                <strong style={{ color: '#10b981' }}>{pendingCsvResult.validRows.length}</strong>
+              </div>
+              <div className="backup-count-item">
+                <span>Unique Records:</span>
+                <strong style={{ color: 'var(--accent-cyan)' }}>{pendingDuplicateCheck.uniqueRows.length}</strong>
+              </div>
+              <div className="backup-count-item">
+                <span>Duplicates:</span>
+                <strong style={{ color: '#f59e0b' }}>{pendingDuplicateCheck.duplicateRows.length}</strong>
+              </div>
+              <div className="backup-count-item">
+                <span>Errors / Invalid:</span>
+                <strong style={{ color: '#fb7185' }}>{pendingCsvResult.errors.length}</strong>
+              </div>
+            </div>
+
+            {/* Parsing Errors Notice if any */}
+            {pendingCsvResult.errors.length > 0 && (
+              <div style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', borderRadius: '10px', padding: '10px 12px', maxHeight: '100px', overflowY: 'auto' }}>
+                <p style={{ color: '#fb7185', fontSize: '0.76rem', fontWeight: 700, margin: '0 0 4px 0' }}>
+                  {pendingCsvResult.errors.length} invalid row(s) skipped:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '16px', color: '#fda4af', fontSize: '0.72rem', lineHeight: '1.4' }}>
+                  {pendingCsvResult.errors.slice(0, 5).map((err, i) => (
+                    <li key={i}>Row {err.rowNumber}: {err.reason}</li>
+                  ))}
+                  {pendingCsvResult.errors.length > 5 && (
+                    <li>...and {pendingCsvResult.errors.length - 5} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {/* Duplicate Notice if any */}
+            {pendingDuplicateCheck.duplicateRows.length > 0 && (
+              <p className="modal-hint-text" style={{ color: '#fbbf24', margin: 0 }}>
+                ⚠️ Notice: {pendingDuplicateCheck.duplicateRows.length} rows match existing expenses already saved in Spendly. You can choose to import only unique rows or import all.
+              </p>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+              {pendingDuplicateCheck.duplicateRows.length > 0 && pendingDuplicateCheck.uniqueRows.length > 0 && (
+                <button
+                  type="button"
+                  className="btn-backup-action"
+                  onClick={() => handleConfirmCsvImport(true)}
+                  disabled={isImportingCsv}
+                  style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0d9488 100%)', color: '#ffffff' }}
+                >
+                  {isImportingCsv ? 'Importing...' : `Import Unique Only (${pendingDuplicateCheck.uniqueRows.length} Expenses)`}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="btn-backup-action"
+                onClick={() => handleConfirmCsvImport(false)}
+                disabled={isImportingCsv || pendingCsvResult.validRows.length === 0}
+                style={{ background: 'rgba(56, 189, 248, 0.16)', border: '1px solid rgba(56, 189, 248, 0.4)', color: 'var(--accent-cyan)' }}
+              >
+                {isImportingCsv ? 'Importing...' : `Import All Valid (${pendingCsvResult.validRows.length} Expenses)`}
+              </button>
+
+              <button
+                type="button"
+                className="btn-modal-cancel"
+                onClick={() => setPendingCsvResult(null)}
+                disabled={isImportingCsv}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
