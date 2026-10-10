@@ -1,70 +1,113 @@
-# HK finance-tracker
+# Spendly
 
-> Mobile-first personal finance application engineered for frictionless daily expense recording with offline-first synchronization and ₹0 ongoing infrastructure cost.
+> **Spend smart. Live better. Make every rupee count.**
+>
+> Version: **v0.1.0** — Local-First Personal Finance Progressive Web Application (PWA).
+
+Live Deployment: [https://karthikmandha3666.github.io/hk-finance-tracker/](https://karthikmandha3666.github.io/hk-finance-tracker/)
 
 ---
 
-## Current Stage
+## Overview
 
-**Stage 4: Persistent Monthly Income & Budget (Dexie.js / IndexedDB)**
-- High-fidelity mobile dashboard with **HK** branding and **finance-tracker** subtitle.
-- Local-first IndexedDB persistence powered by Dexie.js with zero network dependencies.
-- Persistent Monthly Income and Monthly Budget surviving page reloads and browser restarts.
-- Clean repository abstraction layers (`expenseRepository`, `financialSettingsRepository`) isolating storage from UI components.
-- Exact monetary arithmetic stored in integer paise (`amountInPaise`, `incomeInPaise`, `budgetInPaise`) to prevent floating-point errors.
-- Real-time reactivity via `dexie-react-hooks` (`useLiveQuery`).
-- Non-destructive Dexie version upgrade (`version(2)`) ensuring existing expenses remain intact.
-- Dynamic client local date and rolling month selection (no UTC drift) with full month isolation.
-- Validated Edit Income & Budget modal with decimal support, boundary validation, and automatic paise conversion.
-- Dynamic Home view calculations for Monthly Spending, Today's Spending, and Remaining Budget (`budgetInPaise - totalSpendingPaise`) with over-budget indicators.
-- Root-level Error Boundary and full offline PWA caching.
+**Spendly** is a fast, privacy-focused, local-first personal finance tracker designed for mobile devices. Engineered with zero infrastructure cost and zero network dependencies, Spendly stores all your financial records directly on your device using IndexedDB.
+
+---
+
+## Core Features (v0.1.0)
+
+- **Expense Management**: Fast expense recording, editing, and deletion with integer paise accuracy (no floating-point rounding errors).
+- **Persistent Income & Budget**: Set monthly income and spending budgets. Visualize remaining budget and actual budget usage percentage (with over-budget alerts).
+- **Category & Payment Method Customization**: Manage and personalize categories and payment methods with safe active/inactive lifecycles.
+- **Upcoming & Recurring Obligations**: Track recurring bills and subscriptions (daily, weekly, monthly, yearly) with automatic due-date grouping and one-tap "Mark as Paid".
+- **Loans & EMI Management**: Track liabilities (personal loans, car loans, home loans, credit card EMIs) with current outstanding balance, tenure, and reducing-balance EMI calculations.
+- **Comprehensive Analytics Dashboard**:
+  - Today's spending & monthly total
+  - Month-over-Month (MoM) spending comparison
+  - Net monthly savings & cashflow (income vs. actual expenses)
+  - Visual category spending percentage breakdown
+  - Recent transactions list
+- **Permanent Navigation Hub**: Dedicated **More** hub allowing independent access to Upcoming Obligations, Loans & EMI, Categories, and Payment Methods from any screen.
+- **Offline-First PWA**: Installable on Android, iOS, and desktop browsers with full offline functionality.
+
+---
+
+## Architecture & Data Safety
+
+- **Local Storage**: All data is stored in the browser's IndexedDB via **Dexie.js**.
+- **Data Privacy**: No data is ever transmitted to an external server or cloud provider.
+- **Integer Paise Financial Model**: All currency calculations use exact integer paise (`1 Rupee = 100 Paise`), eliminating floating-point rounding discrepancies.
+- **Local Calendar Accuracy**: Date logic operates strictly in local calendar time (`YYYY-MM-DD`), preventing UTC date-shifting defects.
 
 ---
 
 ## Technology Stack
 
-- **Framework**: React 19
+- **Frontend**: React 19
 - **Language**: TypeScript 5.7+
-- **Local Database**: Dexie.js (IndexedDB wrapper) & `dexie-react-hooks`
 - **Build Tool**: Vite 6
-- **PWA Tooling**: `vite-plugin-pwa` (Workbox)
-- **Styling**: Modern Vanilla CSS (Mobile-first responsive design, safe-area insets, accessible contrast)
-- **Package Manager**: npm
+- **Database**: Dexie.js 4.4+ (IndexedDB wrapper) & `dexie-react-hooks`
+- **PWA Tooling**: `vite-plugin-pwa` (Workbox Service Worker precaching)
+- **Styling**: Vanilla CSS (Mobile-first responsive architecture, safe-area insets, accessible contrast)
+- **CI/CD**: GitHub Actions (`deploy.yml`)
+- **Hosting**: GitHub Pages
 
 ---
 
-## Getting Started
+## Current Behavior
 
-### 1. Prerequisites
-Ensure **Node.js** (v20+ or v22 LTS) and **npm** are available in your user profile environment.
+- All data resides strictly in the local client device/browser storage.
+- The application is fully functional offline once loaded or installed.
+- Hosted statically as a project site on GitHub Pages.
+- No remote backend server or database is required for operation.
 
-### 2. Install Dependencies
+---
+
+## Current Limitations (v0.1.0)
+
+Spendly v0.1.0 is intentionally a **local-first, device-centric MVP**. The following capabilities are planned for subsequent phases and are **not** present in v0.1.0:
+
+- No cloud database
+- No multi-device synchronization
+- No user authentication or login system
+- No remote backend APIs
+- No bank API integrations
+- No SMS transaction reading
+- No automatic bank feed imports
+- No multi-user account support
+
+---
+
+## Local Development
+
+### Prerequisites
+- **Node.js** v20+ or v22 LTS
+- **npm** v10+
+
+### Installation
 ```bash
-npm install
+npm ci
 ```
 
-### 3. Run Locally (Development Server)
+### Run Locally (Dev Server)
 ```bash
 npm run dev
 ```
-Open `http://localhost:5173/` in your browser. Use your browser's Developer Tools (`F12` $\rightarrow$ Toggle Device Toolbar) to test responsive widths (360px, 375px, 390px, 430px).
+Open `http://localhost:5173/` or `http://localhost:5174/`.
 
-### 4. Create Production Build
+### Build for Production
 ```bash
 npm run build
 ```
-Compiles TypeScript and creates optimized PWA production assets in `dist/`.
+Generates production assets and PWA service worker in `dist/`.
 
-### 5. Preview Production Build
+### Preview Production Build
 ```bash
 npm run preview
 ```
 
 ---
 
-## Project Roadmap
-- [x] **Stage 1**: Foundation & PWA setup
-- [x] **Stage 2**: Mobile Finance-Tracker UI Shell (Static Placeholders)
-- [x] **Stage 3**: Local-First Expense Storage (Dexie.js / IndexedDB)
-- [x] **Stage 4**: Persistent Monthly Income & Budget
-- [ ] **Stage 5**: Grouped Expense Views & Category Analytics
+## License
+
+MIT License. Designed and engineered by Karthik Mandha.

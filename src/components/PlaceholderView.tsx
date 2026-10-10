@@ -12,8 +12,8 @@ export const PlaceholderView: React.FC<PlaceholderViewProps> = ({ tab, onGoHome 
       case 'expenses':
         return {
           title: 'All Expenses',
-          desc: 'Daily, monthly, and yearly grouped expense records will be integrated here.',
-          tag: 'Planned for Upcoming Stages',
+          desc: 'Detailed chronological ledger with search and filters is planned for a future release. View recent expenses on Home.',
+          tag: 'Spendly Roadmap',
           icon: (
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -27,8 +27,8 @@ export const PlaceholderView: React.FC<PlaceholderViewProps> = ({ tab, onGoHome 
       case 'budgets':
         return {
           title: 'Budgets & Limits',
-          desc: 'Monthly budgets, category allowances, and budget vs. actual analytics will be available here.',
-          tag: 'Planned for Phase 4',
+          desc: 'Category-specific envelope budgeting is planned for a future release. View your monthly budget on Home.',
+          tag: 'Spendly Roadmap',
           icon: (
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
@@ -39,8 +39,8 @@ export const PlaceholderView: React.FC<PlaceholderViewProps> = ({ tab, onGoHome 
       case 'more':
         return {
           title: 'More & Settings',
-          desc: 'Excel import/export, offline sync status, categories manager, and loan tracking.',
-          tag: 'Planned for Phase 5',
+          desc: 'Manage categories, payment methods, upcoming obligations, and loans.',
+          tag: 'Spendly Hub',
           icon: (
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="3" />

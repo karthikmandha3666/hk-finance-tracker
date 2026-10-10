@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { MonthData, Expense } from '../types';
 import { MonthSelector } from './MonthSelector';
 import { recurringPaymentRepository } from '../repositories/recurringPaymentRepository';
+import { loanRepository } from '../repositories/loanRepository';
+import { expenseRepository } from '../repositories/expenseRepository';
+import { dashboardPreferencesRepository, DEFAULT_DASHBOARD_PREFERENCES } from '../repositories/dashboardPreferencesRepository';
 import {
   formatPaiseToRupees,
   sumExpenses,
@@ -10,6 +13,10 @@ import {
   getLocalTodayDateString,
   getDueDateStatus,
   formatDueDateFriendly,
+  calculateCategorySpending,
+  getPreviousMonthId,
+  calculateMonthOverMonth,
+  calculateIncomeVsExpense,
 } from '../utils/finance';
 
 export interface HomeViewProps {
@@ -25,6 +32,7 @@ export interface HomeViewProps {
   onViewAllExpensesClick: () => void;
   onEditExpense: (expense: Expense) => void;
   onOpenUpcoming: () => void;
+  onOpenLoans: () => void;
 }
 
 const getCategoryIconClass = (cat: string): string => {
@@ -154,37 +162,100 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onViewAllExpensesClick,
   onEditExpense,
   onOpenUpcoming,
+  onOpenLoans,
 }) => {
-  // Live query for upcoming obligations from Dexie
+  // Live query for upcoming obligations from Dexie (Stage 7)
   const upcomingPayments = useLiveQuery(() => recurringPaymentRepository.getUpcomingPayments()) ?? [];
   const topUpcoming = upcomingPayments.slice(0, 3);
 
-  const currentMonthData =
-    months.find((m) => m.id === selectedMonthId) ||
-    months[months.length - 1] || {
-      id: selectedMonthId,
-      label: selectedMonthId,
-      shortLabel: selectedMonthId,
-      isCurrentMonth: true,
-    };
+  // Live query for active loans from Dexie (Stage 8)
+  const activeLoans = useLiveQuery(() => loanRepository.getActiveLoans()) ?? [];
+  const totalLoanOutstandingPaise = activeLoans.reduce((sum, l) => sum + l.outstandingAmountInPaise, 0);
+  const totalMonthlyLoanEmiPaise = activeLoans.reduce((sum, l) => sum + l.emiAmountInPaise, 0);
+
+  // Previous month ID and live query for previous month expenses (Stage 9 MoM analytics)
+  const previousMonthId = useMemo(() => getPreviousMonthId(selectedMonthId), [selectedMonthId]);
+  const prevMonthExpenses = useLiveQuery(
+    () => expenseRepository.getExpensesByMonth(previousMonthId),
+    [previousMonthId]
+  ) ?? [];
+
+  const currentMonthData = useMemo(() => {
+    return (
+      months.find((m) => m.id === selectedMonthId) ||
+      months[months.length - 1] || {
+        id: selectedMonthId,
+        label: selectedMonthId,
+        shortLabel: selectedMonthId,
+        isCurrentMonth: true,
+      }
+    );
+  }, [months, selectedMonthId]);
+
+  const prevMonthLabel = useMemo(() => {
+    const found = months.find((m) => m.id === previousMonthId);
+    if (found) return found.shortLabel;
+    const [y, mStr] = previousMonthId.split('-');
+    const mIdx = parseInt(mStr, 10) - 1;
+    const shortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${shortNames[mIdx] || mStr} ${y}`;
+  }, [months, previousMonthId]);
 
   // Real calculations from persisted expenses in IndexedDB (integer paise)
-  const totalSpendingPaise = sumExpenses(expenses);
+  const totalSpendingPaise = useMemo(() => sumExpenses(expenses), [expenses]);
+  const prevTotalSpendingPaise = useMemo(() => sumExpenses(prevMonthExpenses), [prevMonthExpenses]);
 
-  // Today's spending dynamically calculated from local calendar date (no UTC conversion, no isToday field)
+  // Today's spending dynamically calculated from local calendar date (independent of selected month)
   const localTodayStr = getLocalTodayDateString();
-  const todaySpendingPaise = calculateTodaySpending(expenses, localTodayStr);
+  const todayExpenses = useLiveQuery(
+    () => expenseRepository.getExpensesForToday(localTodayStr),
+    [localTodayStr]
+  ) ?? [];
+  const todaySpendingPaise = useMemo(
+    () => calculateTodaySpending(todayExpenses, localTodayStr),
+    [todayExpenses, localTodayStr]
+  );
+
+  // Section visibility preferences from IndexedDB (defaults to ON)
+  const dashboardPrefs = useLiveQuery(
+    () => dashboardPreferencesRepository.getPreferences(),
+    [],
+    DEFAULT_DASHBOARD_PREFERENCES
+  );
+  const showUpcomingObligations = dashboardPrefs?.showUpcomingObligations ?? true;
+  const showLoansSummary = dashboardPrefs?.showLoansSummary ?? true;
+
+  // Stage 9: Month-over-Month Comparison
+  const momResult = useMemo(
+    () => calculateMonthOverMonth(totalSpendingPaise, prevTotalSpendingPaise),
+    [totalSpendingPaise, prevTotalSpendingPaise]
+  );
+
+  // Stage 9: Income vs Expense Analytics (Net Savings & Savings Rate)
+  const incomeVsExpense = useMemo(
+    () => calculateIncomeVsExpense(monthlyIncomePaise, totalSpendingPaise),
+    [monthlyIncomePaise, totalSpendingPaise]
+  );
+
+  // Stage 9: Category Spending Breakdown with Percentages
+  const categorySpending = useMemo(
+    () => calculateCategorySpending(expenses),
+    [expenses]
+  );
+
+  // Stage 9: Recent expenses (most recent 5 expenses)
+  const recentExpenses = useMemo(() => expenses.slice(0, 5), [expenses]);
 
   // Persistent budget calculations (integer paise)
-  const hasBudget = monthlyBudgetPaise !== null && monthlyBudgetPaise > 0;
-  const remainingBudgetPaise =
-    hasBudget ? monthlyBudgetPaise - totalSpendingPaise : null;
+  const hasBudget = monthlyBudgetPaise !== null;
+  const isZeroBudget = monthlyBudgetPaise === 0;
+  const remainingBudgetPaise = hasBudget ? monthlyBudgetPaise - totalSpendingPaise : null;
   const isOverBudget = remainingBudgetPaise !== null && remainingBudgetPaise < 0;
 
-  // Percentage spent
+  // Budget usage percentage (never divide by zero)
   const budgetSpentPercent =
     hasBudget && monthlyBudgetPaise > 0
-      ? Math.min(100, Math.round((totalSpendingPaise / monthlyBudgetPaise) * 100))
+      ? Math.max(0, Math.round((totalSpendingPaise / monthlyBudgetPaise) * 1000) / 10)
       : null;
 
   return (
@@ -206,7 +277,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </span>
             {hasBudget ? (
               <span className={`summary-hero-tag ${isOverBudget ? 'over-budget' : ''}`}>
-                {budgetSpentPercent}% of budget
+                {isZeroBudget
+                  ? (totalSpendingPaise > 0
+                      ? `Over ₹0 limit by ₹${formatPaiseToRupees(totalSpendingPaise)}`
+                      : '0% of budget')
+                  : `${budgetSpentPercent?.toLocaleString('en-IN', { maximumFractionDigits: 1 })}% of budget`}
               </span>
             ) : (
               <span className="summary-hero-tag muted">Budget not set</span>
@@ -222,7 +297,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div className="summary-progress-bar">
               <div
                 className={`summary-progress-fill ${isOverBudget ? 'progress-alert' : ''}`}
-                style={{ width: `${budgetSpentPercent}%` }}
+                style={{
+                  width: `${isZeroBudget ? (totalSpendingPaise > 0 ? 100 : 0) : Math.min(100, budgetSpentPercent ?? 0)}%`,
+                }}
               />
             </div>
           ) : (
@@ -230,33 +307,70 @@ export const HomeView: React.FC<HomeViewProps> = ({
           )}
         </div>
 
-        {/* Today's Spending Card */}
-        <div className="today-spending-card">
-          <div className="today-header">
-            <div className="today-icon-wrapper" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
+        {/* Dual Highlights: Today's Spending + MoM Comparison */}
+        <div className="spending-sub-grid">
+          {/* Today's Spending Card */}
+          <div className="today-spending-card">
+            <div className="today-header">
+              <div className="today-icon-wrapper" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <div className="today-title-group">
+                <span className="today-label">Today's Spending</span>
+                <span className="today-sub">
+                  Recorded today
+                </span>
+              </div>
             </div>
-            <div className="today-title-group">
-              <span className="today-label">Today's Spending</span>
-              <span className="today-sub">
-                {currentMonthData.isCurrentMonth ? 'Recorded today' : 'Prior month'}
-              </span>
+            <div className="today-amount">
+              <span className="currency-symbol-sm">₹</span>
+              <span>{formatPaiseToRupees(todaySpendingPaise)}</span>
             </div>
           </div>
-          <div className="today-amount">
-            <span className="currency-symbol-sm">₹</span>
-            <span>{formatPaiseToRupees(todaySpendingPaise)}</span>
+
+          {/* Month-over-Month Comparison Card */}
+          <div className="mom-comparison-card">
+            <div className="mom-header">
+              <span className="mom-label">vs {prevMonthLabel}</span>
+              {momResult.percentChange !== null ? (
+                <span className={`mom-badge ${momResult.diffPaise === 0 ? 'neutral' : momResult.isIncrease ? 'higher' : 'lower'}`}>
+                  {momResult.diffPaise === 0
+                    ? '0%'
+                    : `${momResult.isIncrease ? '+' : '-'}${momResult.percentChange}%`}
+                </span>
+              ) : (
+                <span className="mom-badge neutral">
+                  {prevTotalSpendingPaise === 0 && totalSpendingPaise > 0 ? 'New' : '0%'}
+                </span>
+              )}
+            </div>
+            <div className="mom-stat-body">
+              <span className="mom-diff-amount">
+                {momResult.diffPaise === 0
+                  ? '₹0'
+                  : `${momResult.diffPaise > 0 ? '+₹' : '-₹'}${formatPaiseToRupees(Math.abs(momResult.diffPaise))}`}
+              </span>
+              <span className="mom-context">
+                {prevTotalSpendingPaise === 0 && totalSpendingPaise > 0
+                  ? 'First month of spending'
+                  : prevTotalSpendingPaise === 0 && totalSpendingPaise === 0
+                  ? 'No expenses in both months'
+                  : momResult.isIncrease
+                  ? 'More than last month'
+                  : 'Saved compared to last month'}
+              </span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Financial Setup & Planning Section (Persistent Income & Budget) */}
+      {/* Financial Setup & Planning Section (Income, Budget & Net Cashflow) */}
       <section className="financial-planning-section">
         <div className="planning-header">
-          <span className="planning-title">Financial Setup</span>
+          <span className="planning-title">Financial Setup & Analytics</span>
           <span className="planning-badge">Monthly</span>
         </div>
 
@@ -290,7 +404,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 className="btn-setup-action"
                 onClick={onOpenEditIncome}
               >
-                + Set Monthly Income
+                + Set your monthly income
               </button>
             )}
           </div>
@@ -324,12 +438,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 className="btn-setup-action"
                 onClick={onOpenEditBudget}
               >
-                + Set Spending Budget
+                + Set your monthly budget
               </button>
             )}
           </div>
 
-          {/* Remaining Budget Card (Calculated from Real Expenses) */}
+          {/* Remaining Budget Card */}
           <div className="planning-card remaining-card">
             <div className="planning-card-top">
               <span className="planning-label">Remaining Budget</span>
@@ -340,11 +454,37 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <div className={`planning-value ${isOverBudget ? 'text-rose' : 'text-primary'}`}>
                 <span className="currency-symbol-sm">{remainingBudgetPaise < 0 ? '-₹' : '₹'}</span>
                 <span>{formatPaiseToRupees(Math.abs(remainingBudgetPaise))}</span>
-                {isOverBudget && <span className="over-budget-pill">Over Limit</span>}
+                {isOverBudget && (
+                  <span className="over-budget-pill">
+                    {isZeroBudget ? 'Over ₹0 Limit' : 'Over Limit'}
+                  </span>
+                )}
               </div>
             ) : (
               <div className="empty-budget-notice">
                 <span>Set budget above to see remaining balance</span>
+              </div>
+            )}
+          </div>
+
+          {/* Income vs Expense (Net Cashflow / Savings) */}
+          <div className="planning-card cashflow-card">
+            <div className="planning-card-top">
+              <span className="planning-label">Net Savings (Cashflow)</span>
+              {incomeVsExpense.savingsRatePercent !== null && !incomeVsExpense.isDeficit && (
+                <span className="savings-rate-tag">{incomeVsExpense.savingsRatePercent}% saved</span>
+              )}
+            </div>
+
+            {incomeVsExpense.netPaise !== null ? (
+              <div className={`planning-value ${incomeVsExpense.isDeficit ? 'text-rose' : 'text-emerald'}`}>
+                <span className="currency-symbol-sm">{incomeVsExpense.netPaise < 0 ? '-₹' : '₹'}</span>
+                <span>{formatPaiseToRupees(Math.abs(incomeVsExpense.netPaise))}</span>
+                {incomeVsExpense.isDeficit && <span className="over-budget-pill">Deficit</span>}
+              </div>
+            ) : (
+              <div className="empty-budget-notice">
+                <span>Set income above to track monthly net savings</span>
               </div>
             )}
           </div>
@@ -367,85 +507,194 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </button>
       </section>
 
-      {/* Lightweight Upcoming Payments Dashboard Section (Stage 7) */}
-      <section className="upcoming-summary-section">
+      {/* Stage 9: Spending by Category Breakdown (Visualization) */}
+      <section className="category-spending-section">
         <div className="section-header">
           <div className="section-title-wrapper">
-            <h3 className="section-title">Upcoming Obligations</h3>
+            <h3 className="section-title">Spending by Category</h3>
           </div>
-          <button
-            type="button"
-            className="btn-text-link"
-            onClick={onOpenUpcoming}
-          >
-            {upcomingPayments.length > 0 ? `View all (${upcomingPayments.length})` : 'Manage'}
-          </button>
+          {categorySpending.length > 0 && (
+            <span className="section-subtext">
+              {categorySpending.length} {categorySpending.length === 1 ? 'category' : 'categories'}
+            </span>
+          )}
         </div>
 
-        {upcomingPayments.length === 0 ? (
-          <div className="upcoming-home-empty">
-            <p>No upcoming bills or recurring payments.</p>
-            <button
-              type="button"
-              className="btn-mini-add-upcoming"
-              onClick={onOpenUpcoming}
-            >
-              + Add Obligation
-            </button>
+        {categorySpending.length === 0 ? (
+          <div className="category-empty-card">
+            <p className="category-empty-text">No expenses recorded for this month.</p>
           </div>
         ) : (
-          <div className="upcoming-home-list">
-            {topUpcoming.map((item) => {
-              const status = getDueDateStatus(item.nextDueDate, localTodayStr);
-              return (
-                <div
-                  key={item.id}
-                  className={`upcoming-home-item ${status}`}
-                  onClick={onOpenUpcoming}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="upcoming-home-left">
-                    <span className={`upcoming-home-badge ${status}`}>
-                      {formatDueDateFriendly(item.nextDueDate, localTodayStr)}
-                    </span>
-                    <div className="upcoming-home-text">
-                      <span className="upcoming-home-name">{item.name}</span>
-                      <span className="upcoming-home-cat">{item.category} &bull; {item.frequency}</span>
-                    </div>
+          <div className="category-breakdown-list">
+            {categorySpending.map((item) => (
+              <div key={item.category} className="category-progress-item">
+                <div className="category-progress-header">
+                  <div className="category-item-label">
+                    <span className={`category-mini-dot ${getCategoryIconClass(item.category)}`} />
+                    <span className="category-name" title={item.category}>{item.category}</span>
                   </div>
-
-                  <div className="upcoming-home-right">
-                    <span className="upcoming-home-amount">
-                      ₹{formatPaiseToRupees(item.amountInPaise)}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn-mini-paid"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        recurringPaymentRepository.markAsPaid(item.id);
-                      }}
-                      title="Mark as paid"
-                      aria-label={`Mark ${item.name} as paid`}
-                    >
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    </button>
+                  <div className="category-item-values">
+                    <span className="category-amount">₹{formatPaiseToRupees(item.totalPaise)}</span>
+                    <span className="category-percent">{item.percentage}%</span>
                   </div>
                 </div>
-              );
-            })}
+                <div className="category-bar-track">
+                  <div
+                    className={`category-bar-fill ${getCategoryIconClass(item.category)}`}
+                    style={{ width: `${Math.min(100, Math.max(2, item.percentage))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>
 
-      {/* Selected Month Expenses List (Real Local-First Dexie Storage) */}
+      {/* Lightweight Upcoming Payments Dashboard Section (Stage 7) */}
+      {showUpcomingObligations && (
+        <section className="upcoming-summary-section">
+          <div className="section-header">
+            <div className="section-title-wrapper">
+              <h3 className="section-title">Upcoming Obligations</h3>
+            </div>
+            <button
+              type="button"
+              className="btn-text-link"
+              onClick={onOpenUpcoming}
+            >
+              {upcomingPayments.length > 0 ? `View all (${upcomingPayments.length})` : 'Manage'}
+            </button>
+          </div>
+
+          {upcomingPayments.length === 0 ? (
+            <div className="upcoming-home-empty">
+              <p>No upcoming payments</p>
+              <button
+                type="button"
+                className="btn-mini-add-upcoming"
+                onClick={onOpenUpcoming}
+              >
+                + Add Obligation
+              </button>
+            </div>
+          ) : (
+            <div className="upcoming-home-list">
+              {topUpcoming.map((item) => {
+                const status = getDueDateStatus(item.nextDueDate, localTodayStr);
+                return (
+                  <div
+                    key={item.id}
+                    className={`upcoming-home-item ${status}`}
+                    onClick={onOpenUpcoming}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="upcoming-home-left">
+                      <span className={`upcoming-home-badge ${status}`}>
+                        {formatDueDateFriendly(item.nextDueDate, localTodayStr)}
+                      </span>
+                      <div className="upcoming-home-text">
+                        <span className="upcoming-home-name" title={item.name}>{item.name}</span>
+                        <span className="upcoming-home-cat" title={`${item.category} • ${item.frequency}`}>{item.category} &bull; {item.frequency}</span>
+                      </div>
+                    </div>
+
+                    <div className="upcoming-home-right">
+                      <span className="upcoming-home-amount">
+                        ₹{formatPaiseToRupees(item.amountInPaise)}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-mini-paid"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          recurringPaymentRepository.markAsPaid(item.id);
+                        }}
+                        title="Mark as paid"
+                        aria-label={`Mark ${item.name} as paid`}
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Lightweight Loan & EMI Summary Section (Stage 8) */}
+      {showLoansSummary && (
+        <section className="loans-summary-section">
+          <div className="section-header">
+            <div className="section-title-wrapper">
+              <h3 className="section-title">Loans & EMI Summary</h3>
+            </div>
+            <button
+              type="button"
+              className="btn-text-link"
+              onClick={onOpenLoans}
+            >
+              {activeLoans.length > 0 ? `Manage (${activeLoans.length})` : 'Manage'}
+            </button>
+          </div>
+
+          {activeLoans.length === 0 ? (
+            <div className="loans-home-empty">
+              <p>No active loans</p>
+              <button
+                type="button"
+                className="btn-mini-add-loan"
+                onClick={onOpenLoans}
+              >
+                + Add Loan / EMI
+              </button>
+            </div>
+          ) : (
+            <div
+              className="loans-home-card"
+              onClick={onOpenLoans}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenLoans();
+                }
+              }}
+              aria-label={`View active loans: Total outstanding ₹${formatPaiseToRupees(totalLoanOutstandingPaise)}, Monthly EMI ₹${formatPaiseToRupees(totalMonthlyLoanEmiPaise)}`}
+            >
+              <div className="loans-home-stat">
+                <span className="loans-home-stat-label">Outstanding</span>
+                <span className="loans-home-stat-val text-rose">
+                  ₹{formatPaiseToRupees(totalLoanOutstandingPaise)}
+                </span>
+              </div>
+              <div className="loans-home-divider" />
+              <div className="loans-home-stat">
+                <span className="loans-home-stat-label">Monthly EMI</span>
+                <span className="loans-home-stat-val text-cyan">
+                  ₹{formatPaiseToRupees(totalMonthlyLoanEmiPaise)}
+                </span>
+              </div>
+              <div className="loans-home-divider" />
+              <div className="loans-home-stat">
+                <span className="loans-home-stat-label">Active Loans</span>
+                <span className="loans-home-stat-val">{activeLoans.length}</span>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Recent Expenses List (Stage 9 Section 11) */}
       <section className="recent-expenses-section">
         <div className="section-header">
           <div className="section-title-wrapper">
-            <h3 className="section-title">{currentMonthData.label} Expenses</h3>
+            <h3 className="section-title">Recent Expenses</h3>
           </div>
           {expenses.length > 0 && (
             <button
@@ -453,7 +702,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="btn-text-link"
               onClick={onViewAllExpensesClick}
             >
-              View all
+              View all ({expenses.length})
             </button>
           )}
         </div>
@@ -469,7 +718,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <line x1="9" y1="15" x2="15" y2="15" />
                 </svg>
               </div>
-              <p className="empty-expenses-title">No expenses recorded for this month.</p>
+              <p className="empty-expenses-title">No expenses recorded yet.</p>
               <button
                 type="button"
                 className="btn-empty-add"
@@ -479,7 +728,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </button>
             </div>
           ) : (
-            expenses.map((item) => (
+            recentExpenses.map((item) => (
               <article
                 key={item.id}
                 className="expense-item-row"
@@ -500,16 +749,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                 <div className="expense-details">
                   <div className="expense-primary-info">
-                    <span className="expense-category">{item.category}</span>
+                    <span className="expense-category" title={item.category}>{item.category}</span>
                     <span className="expense-amount">
                       -₹{formatPaiseToRupees(item.amountInPaise)}
                     </span>
                   </div>
                   <div className="expense-secondary-info">
-                    <span className="expense-meta">
+                    <span className="expense-meta" title={`${item.date} • ${item.paymentMethod}`}>
                       {item.date} • {item.paymentMethod}
                     </span>
-                    {item.note && <span className="expense-note">{item.note}</span>}
+                    {item.note && <span className="expense-note" title={item.note}>{item.note}</span>}
                   </div>
                 </div>
 

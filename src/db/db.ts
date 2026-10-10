@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import { Expense, MonthlySettings, Category, PaymentMethod, RecurringPayment } from '../types';
+import { Expense, MonthlySettings, Category, PaymentMethod, RecurringPayment, Loan, DashboardPreferences } from '../types';
 
 export class HKFinanceDatabase extends Dexie {
   expenses!: Table<Expense, string>;
@@ -7,6 +7,8 @@ export class HKFinanceDatabase extends Dexie {
   categories!: Table<Category, string>;
   paymentMethods!: Table<PaymentMethod, string>;
   recurringPayments!: Table<RecurringPayment, string>;
+  loans!: Table<Loan, string>;
+  dashboardPreferences!: Table<DashboardPreferences, string>;
 
   constructor() {
     super('hk_finance_tracker_db');
@@ -22,6 +24,12 @@ export class HKFinanceDatabase extends Dexie {
     });
     this.version(4).stores({
       recurringPayments: 'id, name, nextDueDate, frequency, category, paymentMethod, isActive, createdAt, updatedAt',
+    });
+    this.version(5).stores({
+      loans: 'id, name, loanType, dueDay, isActive, createdAt, updatedAt',
+    });
+    this.version(6).stores({
+      dashboardPreferences: 'id, updatedAt',
     });
   }
 }

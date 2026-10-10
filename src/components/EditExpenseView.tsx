@@ -10,6 +10,7 @@ import {
   paiseToRupeesInput,
   MAX_AMOUNT_RUPEES,
   MAX_AMOUNT_PAISE,
+  isValidCalendarDate,
 } from '../utils/finance';
 
 interface EditExpenseViewProps {
@@ -72,6 +73,7 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>(expense.category);
   const [selectedPayment, setSelectedPayment] = useState<string>(expense.paymentMethod);
   const [date, setDate] = useState<string>(expense.date);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [note, setNote] = useState<string>(expense.note || '');
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -80,6 +82,17 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDateChange = (val: string) => {
+    setDate(val);
+    if (!val.trim()) {
+      setDateError('Date is required.');
+    } else if (!isValidCalendarDate(val)) {
+      setDateError('Please enter a valid calendar date in YYYY-MM-DD format.');
+    } else {
+      setDateError(null);
+    }
+  };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value;
@@ -143,11 +156,17 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
     amountPaise > 0 &&
     amountPaise <= MAX_AMOUNT_PAISE &&
     date.trim() !== '' &&
+    dateError === null &&
+    isValidCalendarDate(date) &&
     selectedCategory.trim() !== '' &&
     selectedPayment.trim() !== '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidCalendarDate(date)) {
+      setDateError('Please enter a valid calendar date in YYYY-MM-DD format.');
+      return;
+    }
     if (!isFormValid || isSaving || isDeleting) return;
 
     setIsSaving(true);
@@ -274,6 +293,7 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
                 type="button"
                 className={`category-chip ${selectedCategory === cat.name ? 'selected' : ''} ${cat.isInactive ? 'chip-inactive' : ''}`}
                 onClick={() => setSelectedCategory(cat.name)}
+                title={cat.name}
                 disabled={isSaving || isDeleting}
               >
                 {cat.name}
@@ -284,16 +304,21 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
         </div>
 
         {/* Date Selector */}
-        <div className="form-group">
+        <div className={`form-group ${dateError ? 'has-error' : ''}`}>
           <label htmlFor="expense-date" className="form-label">Date</label>
           <input
             id="expense-date"
             type="date"
-            className="form-input date-input"
+            className={`form-input date-input ${dateError ? 'input-error' : ''}`}
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => handleDateChange(e.target.value)}
             disabled={isSaving || isDeleting}
           />
+          {dateError && (
+            <p className="form-validation-msg" role="alert">
+              {dateError}
+            </p>
+          )}
         </div>
 
         {/* Payment Method Selector */}
@@ -306,6 +331,7 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
                 type="button"
                 className={`payment-chip ${selectedPayment === method.name ? 'selected' : ''} ${method.isInactive ? 'chip-inactive' : ''}`}
                 onClick={() => setSelectedPayment(method.name)}
+                title={method.name}
                 disabled={isSaving || isDeleting}
               >
                 {method.name}

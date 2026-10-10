@@ -2,6 +2,7 @@ import { db } from '../db/db';
 import { RecurringPayment, RecurrenceFrequency } from '../types';
 import {
   advanceDueDate,
+  isValidCalendarDate,
   MAX_AMOUNT_PAISE,
 } from '../utils/finance';
 
@@ -53,9 +54,7 @@ function validatePaymentInput(data: {
   }
 
   // Validate calendar date validity (e.g. reject 2026-02-31)
-  const [y, m, d] = data.nextDueDate.trim().split('-').map(Number);
-  const dateObj = new Date(y, m - 1, d);
-  if (dateObj.getFullYear() !== y || dateObj.getMonth() !== m - 1 || dateObj.getDate() !== d) {
+  if (!isValidCalendarDate(data.nextDueDate.trim())) {
     throw new Error(`Invalid calendar date: ${data.nextDueDate}`);
   }
 
@@ -110,12 +109,18 @@ export const recurringPaymentRepository = {
     paymentMethod: string;
     frequency: RecurrenceFrequency;
     nextDueDate: string;
+    anchorDay?: number;
     note?: string;
     isActive?: boolean;
   }): Promise<RecurringPayment> {
     validatePaymentInput(data);
 
     const now = new Date().toISOString();
+    const parsedDay = parseInt(data.nextDueDate.trim().split('-')[2], 10);
+    const anchorDay = (data.anchorDay !== undefined && data.anchorDay >= 1 && data.anchorDay <= 31)
+      ? data.anchorDay
+      : (isNaN(parsedDay) ? 1 : parsedDay);
+
     const newRecord: RecurringPayment = {
       id: crypto.randomUUID(),
       name: data.name.trim(),
@@ -124,6 +129,7 @@ export const recurringPaymentRepository = {
       paymentMethod: data.paymentMethod.trim(),
       frequency: data.frequency,
       nextDueDate: data.nextDueDate.trim(),
+      anchorDay,
       isActive: data.isActive !== undefined ? data.isActive : true,
       note: data.note ? data.note.trim() : undefined,
       createdAt: now,
@@ -145,12 +151,21 @@ export const recurringPaymentRepository = {
       throw new Error(`Recurring payment with ID "${payment.id}" not found.`);
     }
 
+    const isDateChanged = payment.nextDueDate.trim() !== existing.nextDueDate.trim();
+    const parsedDay = parseInt(payment.nextDueDate.trim().split('-')[2], 10);
+    const anchorDay = isDateChanged
+      ? (isNaN(parsedDay) ? 1 : parsedDay)
+      : (payment.anchorDay !== undefined
+          ? payment.anchorDay
+          : (existing.anchorDay !== undefined ? existing.anchorDay : (isNaN(parsedDay) ? 1 : parsedDay)));
+
     const updated: RecurringPayment = {
       ...payment,
       name: payment.name.trim(),
       category: payment.category.trim(),
       paymentMethod: payment.paymentMethod.trim(),
       nextDueDate: payment.nextDueDate.trim(),
+      anchorDay,
       note: payment.note ? payment.note.trim() : undefined,
       createdAt: existing.createdAt, // strictly preserve original createdAt
       updatedAt: new Date().toISOString(),
@@ -220,10 +235,16 @@ export const recurringPaymentRepository = {
       return updated;
     }
 
-    // Recurring payment: advance next due date
-    const nextDate = advanceDueDate(existing.nextDueDate, existing.frequency);
+    // Recurring payment: advance next due date preserving anchorDay
+    const existingDay = parseInt(existing.nextDueDate.split('-')[2], 10);
+    const anchorDay = (existing.anchorDay !== undefined && existing.anchorDay >= 1 && existing.anchorDay <= 31)
+      ? existing.anchorDay
+      : (isNaN(existingDay) ? 1 : existingDay);
+
+    const nextDate = advanceDueDate(existing.nextDueDate, existing.frequency, anchorDay);
     const updated: RecurringPayment = {
       ...existing,
+      anchorDay,
       nextDueDate: nextDate,
       updatedAt: now,
     };

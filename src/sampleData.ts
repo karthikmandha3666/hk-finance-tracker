@@ -11,14 +11,33 @@ const SHORT_MONTH_NAMES = [
 ];
 
 /**
- * Dynamically generates rolling months relative to the local client date (no UTC conversion).
+ * Formats any YYYY-MM month ID into a proper MonthData object dynamically.
  */
-export const getDynamicMonths = (count = 6): MonthData[] => {
+export const formatMonthData = (monthId: string): MonthData => {
+  const [yStr, mStr] = monthId.split('-');
+  const y = parseInt(yStr, 10);
+  const m = parseInt(mStr, 10);
+  const now = new Date();
+  const currentMonthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthIdx = (m >= 1 && m <= 12) ? m - 1 : 0;
+  return {
+    id: monthId,
+    label: `${MONTH_NAMES[monthIdx] || mStr} ${y}`,
+    shortLabel: `${SHORT_MONTH_NAMES[monthIdx] || mStr} ${y}`,
+    isCurrentMonth: monthId === currentMonthId,
+  };
+};
+
+/**
+ * Dynamically generates rolling months relative to the local client date (no UTC conversion),
+ * including past months, current month, and future months.
+ */
+export const getDynamicMonths = (pastCount = 24, futureCount = 12): MonthData[] => {
   const months: MonthData[] = [];
   const now = new Date();
   const currentMonthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  for (let i = count - 1; i >= 0; i--) {
+  for (let i = pastCount; i >= -futureCount; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -37,4 +56,4 @@ export const getDynamicMonths = (count = 6): MonthData[] => {
   return months;
 };
 
-export const INITIAL_MONTHS: MonthData[] = getDynamicMonths(6);
+export const INITIAL_MONTHS: MonthData[] = getDynamicMonths(24, 12);

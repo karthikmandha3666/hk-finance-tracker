@@ -93,9 +93,9 @@ export const EditFinancialModal: React.FC<EditFinancialModalProps> = ({
       return;
     }
 
-    // Disallow only 0
-    if (!isNaN(numVal) && numVal === 0 && !raw.endsWith('.')) {
-      setError('Amount must be greater than ₹0');
+    // Disallow negative
+    if (!isNaN(numVal) && numVal < 0) {
+      setError('Amount cannot be negative');
     } else {
       setError(null);
     }
@@ -122,13 +122,13 @@ export const EditFinancialModal: React.FC<EditFinancialModalProps> = ({
     }
 
     if (inputValue.trim() === '.') {
-      setError('Amount must be greater than ₹0');
+      setError('Invalid amount format');
       return;
     }
 
     const paise = rupeesToPaise(inputValue);
-    if (paise <= 0) {
-      setError('Amount must be greater than ₹0');
+    if (paise < 0) {
+      setError('Amount cannot be negative');
       return;
     }
 

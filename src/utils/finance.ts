@@ -11,16 +11,26 @@ export const rupeesToPaise = (rupeesStr: string): number => {
   const trimmed = rupeesStr.trim();
   if (!trimmed) return 0;
 
-  if (trimmed.includes('.')) {
-    const [intPart, decPart = ''] = trimmed.split('.');
+  const isNegative = trimmed.startsWith('-');
+  const cleanStr = isNegative ? trimmed.slice(1).trim() : trimmed;
+  if (!cleanStr) return 0;
+
+  let totalPaise = 0;
+  if (cleanStr.includes('.')) {
+    const [intPart, decPart = ''] = cleanStr.split('.');
     const intVal = parseInt(intPart || '0', 10);
+    const safeIntVal = isNaN(intVal) ? 0 : intVal;
     // Pad to 2 places and slice exactly 2 decimal digits
     const decVal = parseInt((decPart + '00').slice(0, 2), 10);
-    return intVal * 100 + decVal;
+    const safeDecVal = isNaN(decVal) ? 0 : decVal;
+    totalPaise = safeIntVal * 100 + safeDecVal;
+  } else {
+    const intVal = parseInt(cleanStr, 10);
+    totalPaise = isNaN(intVal) ? 0 : intVal * 100;
   }
 
-  const intVal = parseInt(trimmed, 10);
-  return isNaN(intVal) ? 0 : intVal * 100;
+  if (totalPaise === 0) return 0;
+  return isNegative ? -totalPaise : totalPaise;
 };
 
 /**
@@ -86,6 +96,34 @@ export const getLocalCurrentMonthId = (date = new Date()): string => {
 };
 
 /**
+ * Validates that a date string is strictly in YYYY-MM-DD format and represents a real calendar date.
+ * Rejects non-strings, malformed strings, impossible days (e.g. Feb 30, Feb 31, Apr 31),
+ * leap-year inconsistencies (e.g. Feb 29 on non-leap year), and invalid months.
+ * Keeps valid dates stable without UTC/timezone conversion.
+ */
+export const isValidCalendarDate = (dateStr: string): boolean => {
+  if (typeof dateStr !== 'string') return false;
+  const trimmed = dateStr.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return false;
+
+  const [yStr, mStr, dStr] = trimmed.split('-');
+  const y = parseInt(yStr, 10);
+  const m = parseInt(mStr, 10);
+  const d = parseInt(dStr, 10);
+
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return false;
+  if (m < 1 || m > 12) return false;
+  if (d < 1 || d > 31) return false;
+
+  const dateObj = new Date(y, m - 1, d);
+  return (
+    dateObj.getFullYear() === y &&
+    dateObj.getMonth() === m - 1 &&
+    dateObj.getDate() === d
+  );
+};
+
+/**
  * Converts integer paise into an editable rupees string (e.g. 7500000 -> "75000", 25050 -> "250.50").
  * Pure integer arithmetic, zero floating-point imprecision.
  */
@@ -133,12 +171,15 @@ export const getDueDateStatus = (
 /**
  * Deterministically advances a due date according to its recurrence frequency.
  * Handles month boundaries, year boundaries, leap years, and month-end clamping (e.g. Jan 31 -> Feb 28/29).
+ * Preserves the original scheduled anchor day across short months (e.g. Jan 31 -> Feb 28 -> Mar 31).
  */
 export const advanceDueDate = (
   currentDateStr: string,
-  frequency: 'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly'
+  frequency: 'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly',
+  anchorDay?: number
 ): string => {
   const [y, m, d] = currentDateStr.split('-').map(Number);
+  const baseDay = (anchorDay !== undefined && anchorDay >= 1 && anchorDay <= 31) ? anchorDay : d;
 
   switch (frequency) {
     case 'Daily': {
@@ -158,13 +199,13 @@ export const advanceDueDate = (
       }
       // Clamping: max days in target month
       const maxDays = new Date(targetY, targetM, 0).getDate();
-      const clampedDay = Math.min(d, maxDays);
+      const clampedDay = Math.min(baseDay, maxDays);
       return `${targetY}-${String(targetM).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
     }
     case 'Yearly': {
       const targetY = y + 1;
       const maxDays = new Date(targetY, m, 0).getDate();
-      const clampedDay = Math.min(d, maxDays);
+      const clampedDay = Math.min(baseDay, maxDays);
       return `${targetY}-${String(m).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
     }
     case 'One-time':
@@ -191,4 +232,161 @@ export const formatDueDateFriendly = (
   const [, m, d] = dueDateStr.split('-').map(Number);
   const monthName = SHORT_MONTHS[m - 1] || '';
   return `${monthName} ${d}`;
+};
+
+/**
+ * Calculates monthly EMI in integer paise using the standard reducing balance formula:
+ * EMI = P * R * (1 + R)^N / ((1 + R)^N - 1)
+ */
+export const calculateEMIInPaise = (
+  principalInPaise: number,
+  annualInterestRatePercent: number,
+  tenureMonths: number
+): number => {
+  if (principalInPaise <= 0 || tenureMonths <= 0) return 0;
+  if (annualInterestRatePercent <= 0) {
+    return Math.round(principalInPaise / tenureMonths);
+  }
+  const monthlyRate = annualInterestRatePercent / (12 * 100);
+  const factor = Math.pow(1 + monthlyRate, tenureMonths);
+  if (!isFinite(factor) || factor <= 1) {
+    return Math.round(principalInPaise / tenureMonths);
+  }
+  const emi = (principalInPaise * monthlyRate * factor) / (factor - 1);
+  return Math.round(emi);
+};
+
+/**
+ * Formats day of month into an ordinal string, e.g. 5 -> "5th", 21 -> "21st".
+ */
+export const formatOrdinalDay = (day: number): string => {
+  if (day >= 11 && day <= 13) return `${day}th`;
+  switch (day % 10) {
+    case 1: return `${day}st`;
+    case 2: return `${day}nd`;
+    case 3: return `${day}rd`;
+    default: return `${day}th`;
+  }
+};
+
+export interface CategorySpendingItem {
+  category: string;
+  totalPaise: number;
+  percentage: number;
+}
+
+/**
+ * Calculates category-wise spending aggregated from expenses and sorted descending.
+ */
+export const calculateCategorySpending = (expenses: { category: string; amountInPaise: number }[]): CategorySpendingItem[] => {
+  const totals = new Map<string, number>();
+  let totalSpending = 0;
+
+  for (const exp of expenses) {
+    const prev = totals.get(exp.category) || 0;
+    totals.set(exp.category, prev + exp.amountInPaise);
+    totalSpending += exp.amountInPaise;
+  }
+
+  const items: CategorySpendingItem[] = [];
+  totals.forEach((totalPaise, category) => {
+    const percentage = totalSpending > 0 ? Math.round((totalPaise / totalSpending) * 1000) / 10 : 0;
+    items.push({ category, totalPaise, percentage });
+  });
+
+  return items.sort((a, b) => b.totalPaise - a.totalPaise);
+};
+
+/**
+ * Returns previous calendar month in YYYY-MM format.
+ */
+export const getPreviousMonthId = (monthId: string): string => {
+  const [yStr, mStr] = monthId.split('-');
+  let y = parseInt(yStr, 10);
+  let m = parseInt(mStr, 10);
+  m -= 1;
+  if (m < 1) {
+    m = 12;
+    y -= 1;
+  }
+  return `${y}-${String(m).padStart(2, '0')}`;
+};
+
+/**
+ * Returns next calendar month in YYYY-MM format.
+ */
+export const getNextMonthId = (monthId: string): string => {
+  const [yStr, mStr] = monthId.split('-');
+  let y = parseInt(yStr, 10);
+  let m = parseInt(mStr, 10);
+  m += 1;
+  if (m > 12) {
+    m = 1;
+    y += 1;
+  }
+  return `${y}-${String(m).padStart(2, '0')}`;
+};
+
+export interface MonthOverMonthResult {
+  diffPaise: number;
+  percentChange: number | null;
+  isIncrease: boolean;
+}
+
+/**
+ * Calculates month-over-month comparison without dividing by zero.
+ */
+export const calculateMonthOverMonth = (
+  currentMonthPaise: number,
+  previousMonthPaise: number
+): MonthOverMonthResult => {
+  const diffPaise = currentMonthPaise - previousMonthPaise;
+  if (previousMonthPaise === 0) {
+    return {
+      diffPaise,
+      // When previous month is 0 and current is >0, return null to signal new spending without a fake +100%
+      percentChange: currentMonthPaise > 0 ? null : 0,
+      isIncrease: diffPaise > 0,
+    };
+  }
+  const pct = Math.round((diffPaise / previousMonthPaise) * 1000) / 10;
+  return {
+    diffPaise,
+    percentChange: Math.abs(pct),
+    isIncrease: diffPaise > 0,
+  };
+};
+
+export interface IncomeVsExpenseResult {
+  netPaise: number | null;
+  savingsRatePercent: number | null;
+  isDeficit: boolean;
+}
+
+/**
+ * Calculates income vs expense net savings and savings rate.
+ */
+export const calculateIncomeVsExpense = (
+  incomePaise: number | null,
+  expensePaise: number
+): IncomeVsExpenseResult => {
+  if (incomePaise === null) {
+    return {
+      netPaise: null,
+      savingsRatePercent: null,
+      isDeficit: false,
+    };
+  }
+  const netPaise = incomePaise - expensePaise;
+  const isDeficit = netPaise < 0;
+  const savingsRatePercent =
+    incomePaise > 0
+      ? Math.round((netPaise / incomePaise) * 1000) / 10
+      : 0;
+
+  return {
+    netPaise,
+    savingsRatePercent,
+    isDeficit,
+  };
 };

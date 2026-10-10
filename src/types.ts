@@ -56,8 +56,41 @@ export interface RecurringPayment {
   paymentMethod: string;
   frequency: RecurrenceFrequency;
   nextDueDate: string; // YYYY-MM-DD local calendar date
+  anchorDay?: number; // 1-31 scheduled day of month to prevent month-end clamping drift
   isActive: boolean;
   note?: string;
   createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
+
+export type LoanType =
+  | 'Personal Loan'
+  | 'Home Loan'
+  | 'Car Loan'
+  | 'Credit Card EMI'
+  | 'Consumer Loan'
+  | 'Other';
+
+export interface Loan {
+  id: string; // UUID
+  name: string;
+  loanType: LoanType | string;
+  principalAmountInPaise: number; // integer paise
+  outstandingAmountInPaise: number; // integer paise
+  interestRatePercent: number; // decimal percentage e.g. 10.5
+  emiAmountInPaise: number; // integer paise
+  dueDay: number; // 1-31
+  remainingTenureMonths: number; // integer >= 0
+  startDate: string; // YYYY-MM-DD local calendar date
+  isActive: boolean;
+  note?: string;
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
+
+export interface DashboardPreferences {
+  id: string; // 'dashboard_preferences'
+  showUpcomingObligations: boolean;
+  showLoansSummary: boolean;
   updatedAt: string; // ISO timestamp
 }

@@ -12,8 +12,7 @@ export const Header: React.FC<HeaderProps> = ({ onAddClick }) => {
           <span>₹</span>
         </div>
         <div className="brand-titles">
-          <h1 className="header-brand-title">HK</h1>
-          <span className="header-brand-subtitle">finance-tracker</span>
+          <h1 className="header-brand-title">Spendly</h1>
         </div>
       </div>
 

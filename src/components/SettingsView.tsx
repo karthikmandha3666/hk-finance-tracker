@@ -3,14 +3,22 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Category, PaymentMethod } from '../types';
 import { categoryRepository } from '../repositories/categoryRepository';
 import { paymentMethodRepository } from '../repositories/paymentMethodRepository';
+import { recurringPaymentRepository } from '../repositories/recurringPaymentRepository';
+import { loanRepository } from '../repositories/loanRepository';
 
 interface SettingsViewProps {
   onBack: () => void;
+  onOpenUpcoming: () => void;
+  onOpenLoans: () => void;
 }
 
 type SettingsSection = 'categories' | 'paymentMethods';
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({
+  onBack,
+  onOpenUpcoming,
+  onOpenLoans,
+}) => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('categories');
 
   // Modal dialog states
@@ -35,6 +43,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
 
   const activePaymentMethods = allPaymentMethods.filter((m) => m.isActive);
   const inactivePaymentMethods = allPaymentMethods.filter((m) => !m.isActive);
+
+  // Live queries for navigation hub module summaries
+  const upcomingPayments = useLiveQuery(() => recurringPaymentRepository.getUpcomingPayments()) ?? [];
+  const activeLoans = useLiveQuery(() => loanRepository.getActiveLoans()) ?? [];
 
   // --- Handlers for Categories ---
   const handleOpenAddCategory = () => {
@@ -184,7 +196,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <h2 className="view-title">Settings</h2>
+        <h2 className="view-title">More & Settings</h2>
         <div className="header-placeholder" />
       </div>
 
@@ -194,7 +206,83 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
         </div>
       )}
 
-      {/* Section Switcher Tabs */}
+      {/* Spendly Brand Banner */}
+      <div className="more-brand-card">
+        <div className="more-brand-top">
+          <div className="more-brand-badge" aria-hidden="true">HK</div>
+          <div className="more-brand-info">
+            <h3 className="more-brand-name">Spendly</h3>
+            <span className="more-brand-version">v0.1.0 • Local-First</span>
+          </div>
+        </div>
+        <p className="more-brand-tagline">Spend smart. Live better. Make every rupee count.</p>
+      </div>
+
+      {/* Permanent Navigation Hub: Stage 7 and Stage 8 Modules */}
+      <div className="more-hub-section">
+        <span className="more-hub-section-title">Financial Modules</span>
+        <div className="more-hub-grid">
+          {/* Upcoming Obligations Card */}
+          <button
+            type="button"
+            className="more-hub-card"
+            onClick={onOpenUpcoming}
+            aria-label={`Upcoming Payments: ${upcomingPayments.length} upcoming obligations`}
+          >
+            <div className="more-hub-card-left">
+              <div className="more-hub-icon-box upcoming" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+              </div>
+              <div className="more-hub-card-text">
+                <span className="more-hub-card-title">Upcoming Obligations</span>
+                <span className="more-hub-card-desc">Recurring bills, subscriptions & dues</span>
+              </div>
+            </div>
+            <div className="more-hub-card-right">
+              <span className="more-hub-badge">{upcomingPayments.length} due</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Loans & EMI Card */}
+          <button
+            type="button"
+            className="more-hub-card"
+            onClick={onOpenLoans}
+            aria-label={`Loans and EMI Management: ${activeLoans.length} active loans`}
+          >
+            <div className="more-hub-card-left">
+              <div className="more-hub-icon-box loan" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="5" width="20" height="14" rx="2" />
+                  <line x1="2" y1="10" x2="22" y2="10" />
+                </svg>
+              </div>
+              <div className="more-hub-card-text">
+                <span className="more-hub-card-title">Loans & EMI</span>
+                <span className="more-hub-card-desc">Liabilities, tenure & repayments</span>
+              </div>
+            </div>
+            <div className="more-hub-card-right">
+              <span className="more-hub-badge">{activeLoans.length} active</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div className="more-divider" />
+
+      {/* Section Switcher Tabs: Categories & Payment Methods */}
       <div className="settings-section-tabs">
         <button
           type="button"
@@ -242,7 +330,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
               <div className="settings-item-list">
                 {activeCategories.map((cat) => (
                   <div key={cat.id} className="settings-item-row">
-                    <span className="settings-item-name">{cat.name}</span>
+                    <div className="settings-name-wrapper">
+                      <span className="settings-item-name" title={cat.name}>{cat.name}</span>
+                    </div>
                     <div className="settings-item-actions">
                       <button
                         type="button"
@@ -283,7 +373,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                 {inactiveCategories.map((cat) => (
                   <div key={cat.id} className="settings-item-row inactive-row">
                     <div className="settings-name-wrapper">
-                      <span className="settings-item-name inactive">{cat.name}</span>
+                      <span className="settings-item-name inactive" title={cat.name}>{cat.name}</span>
                       <span className="inactive-badge">Inactive</span>
                     </div>
                     <div className="settings-item-actions">
@@ -346,7 +436,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
               <div className="settings-item-list">
                 {activePaymentMethods.map((pm) => (
                   <div key={pm.id} className="settings-item-row">
-                    <span className="settings-item-name">{pm.name}</span>
+                    <div className="settings-name-wrapper">
+                      <span className="settings-item-name" title={pm.name}>{pm.name}</span>
+                    </div>
                     <div className="settings-item-actions">
                       <button
                         type="button"
@@ -387,7 +479,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onBack }) => {
                 {inactivePaymentMethods.map((pm) => (
                   <div key={pm.id} className="settings-item-row inactive-row">
                     <div className="settings-name-wrapper">
-                      <span className="settings-item-name inactive">{pm.name}</span>
+                      <span className="settings-item-name inactive" title={pm.name}>{pm.name}</span>
                       <span className="inactive-badge">Inactive</span>
                     </div>
                     <div className="settings-item-actions">

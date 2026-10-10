@@ -9,6 +9,7 @@ import {
   MAX_AMOUNT_RUPEES,
   MAX_AMOUNT_PAISE,
   getLocalTodayDateString,
+  isValidCalendarDate,
 } from '../utils/finance';
 
 interface AddExpenseViewProps {
@@ -34,6 +35,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
   const [selectedPayment, setSelectedPayment] = useState<string>('');
   // Initialized dynamically from actual current local client date
   const [date, setDate] = useState<string>(getLocalTodayDateString);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [note, setNote] = useState<string>('');
 
   const effectiveCategory = selectedCategory || (activeCategories.length > 0 ? activeCategories[0].name : '');
@@ -41,6 +43,17 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleDateChange = (val: string) => {
+    setDate(val);
+    if (!val.trim()) {
+      setDateError('Date is required.');
+    } else if (!isValidCalendarDate(val)) {
+      setDateError('Please enter a valid calendar date in YYYY-MM-DD format.');
+    } else {
+      setDateError(null);
+    }
+  };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value;
@@ -106,11 +119,17 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
     amountPaise > 0 &&
     amountPaise <= MAX_AMOUNT_PAISE &&
     date.trim() !== '' &&
+    dateError === null &&
+    isValidCalendarDate(date) &&
     effectiveCategory !== '' &&
     effectivePayment !== '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidCalendarDate(date)) {
+      setDateError('Please enter a valid calendar date in YYYY-MM-DD format.');
+      return;
+    }
     if (!isFormValid || isSaving) return;
 
     setIsSaving(true);
@@ -138,6 +157,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
       setAmount('');
       setNote('');
       setDate(getLocalTodayDateString());
+      setDateError(null);
       setSelectedCategory('');
       setSelectedPayment('');
 
@@ -221,6 +241,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
                   type="button"
                   className={`category-chip ${effectiveCategory === cat.name ? 'selected' : ''}`}
                   onClick={() => setSelectedCategory(cat.name)}
+                  title={cat.name}
                 >
                   {cat.name}
                 </button>
@@ -230,15 +251,20 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
         </div>
 
         {/* Date Selector */}
-        <div className="form-group">
+        <div className={`form-group ${dateError ? 'has-error' : ''}`}>
           <label htmlFor="expense-date" className="form-label">Date</label>
           <input
             id="expense-date"
             type="date"
-            className="form-input date-input"
+            className={`form-input date-input ${dateError ? 'input-error' : ''}`}
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => handleDateChange(e.target.value)}
           />
+          {dateError && (
+            <p className="form-validation-msg" role="alert">
+              {dateError}
+            </p>
+          )}
         </div>
 
         {/* Payment Method Selector */}
@@ -265,6 +291,7 @@ export const AddExpenseView: React.FC<AddExpenseViewProps> = ({
                   type="button"
                   className={`payment-chip ${effectivePayment === method.name ? 'selected' : ''}`}
                   onClick={() => setSelectedPayment(method.name)}
+                  title={method.name}
                 >
                   {method.name}
                 </button>

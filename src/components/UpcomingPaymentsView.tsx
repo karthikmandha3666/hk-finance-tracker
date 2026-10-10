@@ -4,6 +4,7 @@ import { RecurringPayment, RecurrenceFrequency } from '../types';
 import { recurringPaymentRepository } from '../repositories/recurringPaymentRepository';
 import { categoryRepository } from '../repositories/categoryRepository';
 import { paymentMethodRepository } from '../repositories/paymentMethodRepository';
+import { dashboardPreferencesRepository, DEFAULT_DASHBOARD_PREFERENCES } from '../repositories/dashboardPreferencesRepository';
 import {
   formatPaiseToRupees,
   rupeesToPaise,
@@ -46,6 +47,24 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
   const allPayments = useLiveQuery(() => recurringPaymentRepository.getRecurringPayments()) ?? [];
   const activeCategories = useLiveQuery(() => categoryRepository.getActiveCategories()) ?? [];
   const activePaymentMethods = useLiveQuery(() => paymentMethodRepository.getActivePaymentMethods()) ?? [];
+
+  // Dashboard section visibility preference
+  const dashboardPrefs = useLiveQuery(
+    () => dashboardPreferencesRepository.getPreferences(),
+    [],
+    DEFAULT_DASHBOARD_PREFERENCES
+  );
+  const showOnHome = dashboardPrefs?.showUpcomingObligations ?? true;
+
+  const handleToggleShowOnHome = async () => {
+    try {
+      const nextVal = !showOnHome;
+      await dashboardPreferencesRepository.updateUpcomingVisibility(nextVal);
+      showFeedback(nextVal ? 'Upcoming Obligations will show on Home' : 'Upcoming Obligations hidden from Home');
+    } catch (err) {
+      console.error('Failed to update dashboard preferences:', err);
+    }
+  };
 
   const localToday = getLocalTodayDateString();
 
@@ -288,10 +307,10 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
       <div key={payment.id} className={`upcoming-card ${isInactive ? 'inactive' : status}`}>
         <div className="upcoming-card-top">
           <div className="upcoming-title-group">
-            <h4 className="upcoming-name">{payment.name}</h4>
+            <h4 className="upcoming-name" title={payment.name}>{payment.name}</h4>
             <div className="upcoming-tags">
-              <span className="upcoming-category-tag">{payment.category}</span>
-              <span className="upcoming-method-tag">{payment.paymentMethod}</span>
+              <span className="upcoming-category-tag" title={payment.category}>{payment.category}</span>
+              <span className="upcoming-method-tag" title={payment.paymentMethod}>{payment.paymentMethod}</span>
               <span className="upcoming-freq-tag">{payment.frequency}</span>
             </div>
           </div>
@@ -303,7 +322,7 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
           </div>
         </div>
 
-        {payment.note && <p className="upcoming-note">{payment.note}</p>}
+        {payment.note && <p className="upcoming-note" title={payment.note}>{payment.note}</p>}
 
         <div className="upcoming-card-actions">
           {!isInactive && (
@@ -381,6 +400,26 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
           <span>{feedbackMsg}</span>
         </div>
       )}
+
+      {/* Home Visibility Preference Setting */}
+      <div className="home-pref-setting-card">
+        <div className="home-pref-info">
+          <span className="home-pref-title">Show on Home</span>
+          <span className="home-pref-desc">Display upcoming obligations on the Home dashboard</span>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          id="upcoming-show-on-home-toggle"
+          aria-checked={showOnHome}
+          aria-label="Show on Home"
+          className={`home-pref-toggle-btn ${showOnHome ? 'is-on' : 'is-off'}`}
+          onClick={handleToggleShowOnHome}
+        >
+          <span className="home-pref-toggle-state-label">{showOnHome ? 'ON' : 'OFF'}</span>
+          <span className="home-pref-toggle-thumb" aria-hidden="true" />
+        </button>
+      </div>
 
       {/* Action Header */}
       <div className="upcoming-action-bar">

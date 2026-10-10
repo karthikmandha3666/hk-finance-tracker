@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { MonthData } from '../types';
+import { getPreviousMonthId, getNextMonthId } from '../utils/finance';
+import { formatMonthData } from '../sampleData';
 
 interface MonthSelectorProps {
   months: MonthData[];
@@ -12,22 +14,18 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
   selectedMonthId,
   onSelectMonth,
 }) => {
-  const currentIndex = months.findIndex((m) => m.id === selectedMonthId);
-  const currentMonth = months[currentIndex] || months[months.length - 1];
-
-  const hasPrev = currentIndex > 0;
-  const hasNext = currentIndex < months.length - 1;
+  const currentMonth = useMemo(() => {
+    const found = months.find((m) => m.id === selectedMonthId);
+    if (found) return found;
+    return formatMonthData(selectedMonthId);
+  }, [months, selectedMonthId]);
 
   const handlePrev = () => {
-    if (hasPrev) {
-      onSelectMonth(months[currentIndex - 1].id);
-    }
+    onSelectMonth(getPreviousMonthId(selectedMonthId));
   };
 
   const handleNext = () => {
-    if (hasNext) {
-      onSelectMonth(months[currentIndex + 1].id);
-    }
+    onSelectMonth(getNextMonthId(selectedMonthId));
   };
 
   return (
@@ -36,7 +34,6 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
         type="button"
         className="month-nav-btn"
         onClick={handlePrev}
-        disabled={!hasPrev}
         aria-label="Previous month"
       >
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -58,7 +55,6 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
         type="button"
         className="month-nav-btn"
         onClick={handleNext}
-        disabled={!hasNext}
         aria-label="Next month"
       >
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
