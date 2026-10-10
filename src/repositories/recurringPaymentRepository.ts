@@ -5,6 +5,7 @@ import {
   isValidCalendarDate,
   MAX_AMOUNT_PAISE,
 } from '../utils/finance';
+import { generateUUID } from '../utils/uuid';
 
 const MAX_NAME_LENGTH = 50;
 const MAX_NOTE_LENGTH = 120;
@@ -122,7 +123,7 @@ export const recurringPaymentRepository = {
       : (isNaN(parsedDay) ? 1 : parsedDay);
 
     const newRecord: RecurringPayment = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: data.name.trim(),
       amountInPaise: data.amountInPaise,
       category: data.category.trim(),
@@ -212,44 +213,88 @@ export const recurringPaymentRepository = {
   },
 
   /**
-   * Marks a payment as paid.
-   * If frequency is 'One-time': marks completed/inactive.
-   * If recurring: advances nextDueDate according to frequency.
-   * Note: Does NOT automatically create an expense.
+   * Permanently deletes a recurring payment record by ID.
    */
-  async markAsPaid(id: string): Promise<RecurringPayment> {
+  async deleteRecurringPayment(id: string): Promise<void> {
     const existing = await db.recurringPayments.get(id);
     if (!existing) {
       throw new Error(`Recurring payment with ID "${id}" not found.`);
     }
+    await db.recurringPayments.delete(id);
+  },
 
-    const now = new Date().toISOString();
-
-    if (existing.frequency === 'One-time') {
-      const updated: RecurringPayment = {
-        ...existing,
-        isActive: false,
-        updatedAt: now,
-      };
-      await db.recurringPayments.put(updated);
-      return updated;
+  /**
+   * Marks a payment as paid.
+   * If frequency is 'One-time': marks completed/inactive.
+   * If recurring: advances nextDueDate according to frequency.
+   * Note: Does NOT automatically create an expense.
+   *
+   * Repository-level concurrency protection:
+   * 1. In-flight operation lock map deduplicates concurrent calls within the same tab.
+   * 2. Dexie 'rw' read-write transaction serializes operations across browser tabs.
+   * 3. If expectedCurrentDueDate is passed, a stale second request does not advance again.
+   */
+  async markAsPaid(id: string, expectedCurrentDueDate?: string): Promise<RecurringPayment> {
+    const activeOp = inFlightPaymentOperations.get(id);
+    if (activeOp) {
+      return activeOp;
     }
 
-    // Recurring payment: advance next due date preserving anchorDay
-    const existingDay = parseInt(existing.nextDueDate.split('-')[2], 10);
-    const anchorDay = (existing.anchorDay !== undefined && existing.anchorDay >= 1 && existing.anchorDay <= 31)
-      ? existing.anchorDay
-      : (isNaN(existingDay) ? 1 : existingDay);
+    const opPromise = (async () => {
+      try {
+        return await db.transaction('rw', db.recurringPayments, async () => {
+          const existing = await db.recurringPayments.get(id);
+          if (!existing) {
+            throw new Error(`Recurring payment with ID "${id}" not found.`);
+          }
 
-    const nextDate = advanceDueDate(existing.nextDueDate, existing.frequency, anchorDay);
-    const updated: RecurringPayment = {
-      ...existing,
-      anchorDay,
-      nextDueDate: nextDate,
-      updatedAt: now,
-    };
+          // Cross-tab / stale date check:
+          // If expectedCurrentDueDate is specified and no longer matches, another tab already advanced it.
+          if (expectedCurrentDueDate && existing.nextDueDate !== expectedCurrentDueDate) {
+            return existing;
+          }
 
-    await db.recurringPayments.put(updated);
-    return updated;
+          const now = new Date().toISOString();
+
+          if (existing.frequency === 'One-time') {
+            if (!existing.isActive) {
+              return existing;
+            }
+            const updated: RecurringPayment = {
+              ...existing,
+              isActive: false,
+              updatedAt: now,
+            };
+            await db.recurringPayments.put(updated);
+            return updated;
+          }
+
+          // Recurring payment: advance next due date preserving anchorDay
+          const existingDay = parseInt(existing.nextDueDate.split('-')[2], 10);
+          const anchorDay = (existing.anchorDay !== undefined && existing.anchorDay >= 1 && existing.anchorDay <= 31)
+            ? existing.anchorDay
+            : (isNaN(existingDay) ? 1 : existingDay);
+
+          const nextDate = advanceDueDate(existing.nextDueDate, existing.frequency, anchorDay);
+          const updated: RecurringPayment = {
+            ...existing,
+            anchorDay,
+            nextDueDate: nextDate,
+            updatedAt: now,
+          };
+
+          await db.recurringPayments.put(updated);
+          return updated;
+        });
+      } finally {
+        inFlightPaymentOperations.delete(id);
+      }
+    })();
+
+    inFlightPaymentOperations.set(id, opPromise);
+    return opPromise;
   },
 };
+
+// In-flight operation lock map to deduplicate concurrent calls for the same payment ID
+const inFlightPaymentOperations = new Map<string, Promise<RecurringPayment>>();

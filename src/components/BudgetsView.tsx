@@ -5,6 +5,7 @@ import {
   formatPaiseToRupees,
   sumExpenses,
   calculateCategorySpending,
+  calculateBudgetMetrics,
 } from '../utils/finance';
 
 export interface BudgetsViewProps {
@@ -52,21 +53,19 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   // Calculations
   const totalSpendingPaise = useMemo(() => sumExpenses(expenses), [expenses]);
 
-  const hasBudget = monthlyBudgetPaise !== null;
-  const isZeroBudget = monthlyBudgetPaise === 0;
-  const remainingBudgetPaise = hasBudget ? monthlyBudgetPaise - totalSpendingPaise : null;
-  const isOverBudget = remainingBudgetPaise !== null && remainingBudgetPaise < 0;
-
-  // Actual usage percentage (strictly avoids division by zero, NaN, or Infinity)
-  const actualBudgetPercent =
-    hasBudget && monthlyBudgetPaise > 0
-      ? Math.round((totalSpendingPaise / monthlyBudgetPaise) * 1000) / 10
-      : null;
-
-  // Visual progress clamped between 0 and 100 for the progress bar
-  const visualProgress = isZeroBudget
-    ? (totalSpendingPaise > 0 ? 100 : 0)
-    : (actualBudgetPercent !== null ? Math.min(100, Math.max(0, actualBudgetPercent)) : 0);
+  // Persistent budget calculations using shared utility (MAS-03)
+  const budgetMetrics = useMemo(
+    () => calculateBudgetMetrics(monthlyBudgetPaise, totalSpendingPaise),
+    [monthlyBudgetPaise, totalSpendingPaise]
+  );
+  const {
+    hasBudget,
+    remainingBudgetPaise,
+    isOverBudget,
+    visualProgress,
+    usageLabel,
+    statusPill,
+  } = budgetMetrics;
 
   // Net Cashflow
   const netCashflowPaise =
@@ -117,7 +116,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
               <span className="budget-amount-label">Allocated Budget</span>
               <div className="budget-amount-val text-cyan">
                 <span className="currency-symbol">₹</span>
-                <span>{formatPaiseToRupees(monthlyBudgetPaise)}</span>
+                <span>{monthlyBudgetPaise !== null ? formatPaiseToRupees(monthlyBudgetPaise) : '0'}</span>
               </div>
             </div>
 
@@ -127,11 +126,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                   Spent: ₹{formatPaiseToRupees(totalSpendingPaise)}
                 </span>
                 <span className={`budget-usage-badge ${isOverBudget ? 'over-budget' : ''}`}>
-                  {isZeroBudget
-                    ? (totalSpendingPaise > 0
-                        ? `Over ₹0 limit by ₹${formatPaiseToRupees(totalSpendingPaise)}`
-                        : '0% used')
-                    : `${actualBudgetPercent?.toLocaleString('en-IN', { maximumFractionDigits: 1 })}% used`}
+                  {usageLabel}
                 </span>
               </div>
 
@@ -154,7 +149,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
               <div className="budget-stat-col">
                 <span className="stat-col-label">Status</span>
                 <span className={`stat-status-pill ${isOverBudget ? 'over-budget' : 'on-track'}`}>
-                  {isOverBudget ? (isZeroBudget ? 'Over ₹0 Limit' : 'Over Budget') : 'On Track'}
+                  {statusPill}
                 </span>
               </div>
             </div>

@@ -52,6 +52,7 @@ export const LoansView: React.FC<LoansViewProps> = ({ onBack, initialOpenAdd = f
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+  const [loanPendingDelete, setLoanPendingDelete] = useState<Loan | null>(null);
 
   // Live queries
   const allLoans = useLiveQuery(() => loanRepository.getLoans()) ?? [];
@@ -296,6 +297,7 @@ export const LoansView: React.FC<LoansViewProps> = ({ onBack, initialOpenAdd = f
       showFeedback(`Closed loan "${loan.name}"`);
     } catch (err) {
       console.error('Failed to deactivate loan:', err);
+      showFeedback('Failed to close loan. Please try again.');
     }
   };
 
@@ -305,6 +307,21 @@ export const LoansView: React.FC<LoansViewProps> = ({ onBack, initialOpenAdd = f
       showFeedback(`Reactivated loan "${loan.name}"`);
     } catch (err) {
       console.error('Failed to reactivate loan:', err);
+      showFeedback('Failed to reactivate loan. Please try again.');
+    }
+  };
+
+  const handleDeleteLoan = async (loan: Loan) => {
+    setIsSubmitting(true);
+    try {
+      await loanRepository.deleteLoan(loan.id);
+      showFeedback(`Deleted loan "${loan.name}"`);
+      setLoanPendingDelete(null);
+    } catch (err) {
+      console.error('Failed to delete loan:', err);
+      showFeedback('Failed to delete loan. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -437,6 +454,19 @@ export const LoansView: React.FC<LoansViewProps> = ({ onBack, initialOpenAdd = f
                 Close Loan
               </button>
             )}
+
+            <button
+              type="button"
+              className="btn-card-icon delete"
+              onClick={() => setLoanPendingDelete(loan)}
+              title="Delete Loan"
+              aria-label={`Delete ${loan.name}`}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -923,6 +953,67 @@ export const LoansView: React.FC<LoansViewProps> = ({ onBack, initialOpenAdd = f
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {loanPendingDelete && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setLoanPendingDelete(null)}
+          role="presentation"
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-loan-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <h3 id="delete-loan-modal-title" className="modal-title">Delete Loan?</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setLoanPendingDelete(null)}
+                aria-label="Close dialog"
+                disabled={isSubmitting}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="modal-desc">
+              Are you sure you want to permanently delete{' '}
+              <strong style={{ color: '#f8fafc' }}>
+                "{loanPendingDelete.name}"
+              </strong>? This action cannot be undone. Pre-existing expenses will remain untouched.
+            </p>
+
+            <div className="modal-actions-row">
+              <button
+                type="button"
+                className="btn-modal-cancel"
+                onClick={() => setLoanPendingDelete(null)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-modal-delete"
+                onClick={() => handleDeleteLoan(loanPendingDelete)}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

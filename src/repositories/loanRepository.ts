@@ -1,5 +1,6 @@
 import { db } from '../db/db';
 import { Loan, LoanType } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 export interface CreateLoanInput {
   name: string;
@@ -162,7 +163,7 @@ export const loanRepository = {
 
     const now = new Date().toISOString();
     const newRecord: Loan = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: data.name.trim(),
       loanType: data.loanType.trim(),
       principalAmountInPaise: data.principalAmountInPaise,
@@ -273,5 +274,16 @@ export const loanRepository = {
 
     await db.loans.put(updated);
     return updated;
+  },
+
+  /**
+   * Permanently deletes a loan record by ID.
+   */
+  async deleteLoan(id: string): Promise<void> {
+    const existing = await db.loans.get(id);
+    if (!existing) {
+      throw new Error(`Loan with ID "${id}" not found.`);
+    }
+    await db.loans.delete(id);
   },
 };

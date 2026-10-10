@@ -42,6 +42,8 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+  const [processingPaymentId, setProcessingPaymentId] = useState<string | null>(null);
+  const [paymentPendingDelete, setPaymentPendingDelete] = useState<RecurringPayment | null>(null);
 
   // Reactive data queries
   const allPayments = useLiveQuery(() => recurringPaymentRepository.getRecurringPayments()) ?? [];
@@ -266,8 +268,10 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
   };
 
   const handleMarkAsPaid = async (payment: RecurringPayment) => {
+    if (processingPaymentId) return;
+    setProcessingPaymentId(payment.id);
     try {
-      const updated = await recurringPaymentRepository.markAsPaid(payment.id);
+      const updated = await recurringPaymentRepository.markAsPaid(payment.id, payment.nextDueDate);
       if (payment.frequency === 'One-time') {
         showFeedback(`Marked "${payment.name}" as paid (completed)`);
       } else {
@@ -275,6 +279,9 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
       }
     } catch (err) {
       console.error('Failed to mark as paid:', err);
+      showFeedback('Failed to mark payment as paid. Please try again.');
+    } finally {
+      setProcessingPaymentId(null);
     }
   };
 
@@ -284,6 +291,7 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
       showFeedback(`Deactivated "${payment.name}"`);
     } catch (err) {
       console.error('Failed to deactivate payment:', err);
+      showFeedback('Failed to deactivate payment. Please try again.');
     }
   };
 
@@ -293,6 +301,21 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
       showFeedback(`Reactivated "${payment.name}"`);
     } catch (err) {
       console.error('Failed to reactivate payment:', err);
+      showFeedback('Failed to reactivate payment. Please try again.');
+    }
+  };
+
+  const handleDeletePayment = async (payment: RecurringPayment) => {
+    setIsSubmitting(true);
+    try {
+      await recurringPaymentRepository.deleteRecurringPayment(payment.id);
+      showFeedback(`Deleted "${payment.name}"`);
+      setPaymentPendingDelete(null);
+    } catch (err) {
+      console.error('Failed to delete payment:', err);
+      showFeedback('Failed to delete payment. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -330,12 +353,14 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
               type="button"
               className="btn-mark-paid"
               onClick={() => handleMarkAsPaid(payment)}
+              disabled={processingPaymentId === payment.id}
+              aria-busy={processingPaymentId === payment.id}
               title="Mark as paid"
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              <span>Mark as Paid</span>
+              <span>{processingPaymentId === payment.id ? 'Processing...' : 'Mark as Paid'}</span>
             </button>
           )}
 
@@ -371,6 +396,19 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
                 Deactivate
               </button>
             )}
+
+            <button
+              type="button"
+              className="btn-card-icon delete"
+              onClick={() => setPaymentPendingDelete(payment)}
+              title="Delete"
+              aria-label={`Delete ${payment.name}`}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -735,6 +773,67 @@ export const UpcomingPaymentsView: React.FC<UpcomingPaymentsViewProps> = ({ onBa
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {paymentPendingDelete && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setPaymentPendingDelete(null)}
+          role="presentation"
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-payment-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <h3 id="delete-payment-modal-title" className="modal-title">Delete Recurring Payment?</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setPaymentPendingDelete(null)}
+                aria-label="Close dialog"
+                disabled={isSubmitting}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="modal-desc">
+              Are you sure you want to permanently delete{' '}
+              <strong style={{ color: '#f8fafc' }}>
+                "{paymentPendingDelete.name}"
+              </strong>? This action cannot be undone. Pre-existing expenses will remain untouched.
+            </p>
+
+            <div className="modal-actions-row">
+              <button
+                type="button"
+                className="btn-modal-cancel"
+                onClick={() => setPaymentPendingDelete(null)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-modal-delete"
+                onClick={() => handleDeletePayment(paymentPendingDelete)}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

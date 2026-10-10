@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { MonthData, Expense } from '../types';
 import { MonthSelector } from './MonthSelector';
@@ -17,6 +17,7 @@ import {
   getPreviousMonthId,
   calculateMonthOverMonth,
   calculateIncomeVsExpense,
+  calculateBudgetMetrics,
 } from '../utils/finance';
 
 export interface HomeViewProps {
@@ -164,6 +165,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenUpcoming,
   onOpenLoans,
 }) => {
+  const [processingPaymentId, setProcessingPaymentId] = useState<string | null>(null);
+
   // Live query for upcoming obligations from Dexie (Stage 7)
   const upcomingPayments = useLiveQuery(() => recurringPaymentRepository.getUpcomingPayments()) ?? [];
   const topUpcoming = upcomingPayments.slice(0, 3);
@@ -246,17 +249,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
   // Stage 9: Recent expenses (most recent 5 expenses)
   const recentExpenses = useMemo(() => expenses.slice(0, 5), [expenses]);
 
-  // Persistent budget calculations (integer paise)
-  const hasBudget = monthlyBudgetPaise !== null;
-  const isZeroBudget = monthlyBudgetPaise === 0;
-  const remainingBudgetPaise = hasBudget ? monthlyBudgetPaise - totalSpendingPaise : null;
-  const isOverBudget = remainingBudgetPaise !== null && remainingBudgetPaise < 0;
-
-  // Budget usage percentage (never divide by zero)
-  const budgetSpentPercent =
-    hasBudget && monthlyBudgetPaise > 0
-      ? Math.max(0, Math.round((totalSpendingPaise / monthlyBudgetPaise) * 1000) / 10)
-      : null;
+  // Persistent budget calculations (integer paise) using shared utility (MAS-03)
+  const budgetMetrics = useMemo(
+    () => calculateBudgetMetrics(monthlyBudgetPaise, totalSpendingPaise),
+    [monthlyBudgetPaise, totalSpendingPaise]
+  );
+  const {
+    hasBudget,
+    isZeroBudget,
+    remainingBudgetPaise,
+    isOverBudget,
+    actualBudgetPercent: budgetSpentPercent,
+  } = budgetMetrics;
 
   return (
     <div className="home-view">
@@ -606,9 +610,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       <button
                         type="button"
                         className="btn-mini-paid"
-                        onClick={(e) => {
+                        disabled={processingPaymentId === item.id}
+                        aria-busy={processingPaymentId === item.id}
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          recurringPaymentRepository.markAsPaid(item.id);
+                          if (processingPaymentId) return;
+                          setProcessingPaymentId(item.id);
+                          try {
+                            await recurringPaymentRepository.markAsPaid(item.id, item.nextDueDate);
+                          } catch (err) {
+                            console.error('Failed to mark as paid:', err);
+                          } finally {
+                            setProcessingPaymentId(null);
+                          }
                         }}
                         title="Mark as paid"
                         aria-label={`Mark ${item.name} as paid`}

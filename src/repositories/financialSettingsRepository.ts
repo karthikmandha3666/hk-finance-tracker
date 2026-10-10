@@ -1,5 +1,6 @@
 import { db } from '../db/db';
 import { MonthlySettings } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 export const financialSettingsRepository = {
   /**
@@ -28,7 +29,7 @@ export const financialSettingsRepository = {
       await db.monthlySettings.put(updated);
       return existing.id;
     } else {
-      const id = settings.id || crypto.randomUUID();
+      const id = settings.id || generateUUID();
       const created: MonthlySettings = {
         id,
         monthId: settings.monthId,
@@ -59,7 +60,7 @@ export const financialSettingsRepository = {
       return updated;
     } else {
       const created: MonthlySettings = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         monthId,
         incomeInPaise,
         budgetInPaise: null,
@@ -88,7 +89,7 @@ export const financialSettingsRepository = {
       return updated;
     } else {
       const created: MonthlySettings = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         monthId,
         incomeInPaise: null,
         budgetInPaise,

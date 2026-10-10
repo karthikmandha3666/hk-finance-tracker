@@ -1,5 +1,6 @@
 import { db } from '../db/db';
 import { Category } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 export const DEFAULT_CATEGORIES: string[] = [
   'Food',
@@ -49,7 +50,7 @@ export const categoryRepository = {
         if (count === 0) {
           const now = new Date().toISOString();
           const initialCategories: Category[] = DEFAULT_CATEGORIES.map((catName) => ({
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             name: catName,
             isActive: true,
             createdAt: now,
@@ -99,7 +100,7 @@ export const categoryRepository = {
 
     const now = new Date().toISOString();
     const newCategory: Category = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: trimmed,
       isActive: true,
       createdAt: now,

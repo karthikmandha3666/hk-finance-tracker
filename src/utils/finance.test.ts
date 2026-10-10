@@ -9,6 +9,7 @@ import {
   getNextMonthId,
   formatOrdinalDay,
   isValidCalendarDate,
+  calculateBudgetMetrics,
 } from './finance';
 import type { Expense } from '../types';
 
@@ -254,64 +255,27 @@ describe('finance utilities', () => {
     });
   });
 
-  describe('DEF-02: Explicit ₹0 budget handling logic', () => {
-    // Shared helper modeling the Home & Budgets view calculation
-    function computeBudgetMetrics(monthlyBudgetPaise: number | null, totalSpendingPaise: number) {
-      const hasBudget = monthlyBudgetPaise !== null;
-      const isZeroBudget = monthlyBudgetPaise === 0;
-      const remainingBudgetPaise = hasBudget ? monthlyBudgetPaise - totalSpendingPaise : null;
-      const isOverBudget = remainingBudgetPaise !== null && remainingBudgetPaise < 0;
-
-      // Actual usage percentage (strictly avoids division by zero, NaN, or Infinity)
-      const actualBudgetPercent =
-        hasBudget && monthlyBudgetPaise > 0
-          ? Math.round((totalSpendingPaise / monthlyBudgetPaise) * 1000) / 10
-          : null;
-
-      const visualProgress = isZeroBudget
-        ? (totalSpendingPaise > 0 ? 100 : 0)
-        : (actualBudgetPercent !== null ? Math.min(100, Math.max(0, actualBudgetPercent)) : 0);
-
-      const usageLabel = isZeroBudget
-        ? (totalSpendingPaise > 0
-            ? `Over ₹0 limit by ₹${formatPaiseToRupees(totalSpendingPaise)}`
-            : '0% used')
-        : (actualBudgetPercent !== null ? `${actualBudgetPercent}% used` : null);
-
-      const statusPill = isOverBudget
-        ? (isZeroBudget ? 'Over ₹0 Limit' : 'Over Budget')
-        : 'On Track';
-
-      return {
-        hasBudget,
-        isZeroBudget,
-        remainingBudgetPaise,
-        isOverBudget,
-        actualBudgetPercent,
-        visualProgress,
-        usageLabel,
-        statusPill,
-      };
-    }
-
+  describe('DEF-02 & MAS-03: Production calculateBudgetMetrics calculation', () => {
     it('distinguishes null (budget not set) from explicit 0 budget', () => {
-      const nullBudget = computeBudgetMetrics(null, 50000);
+      const nullBudget = calculateBudgetMetrics(null, 50000);
       expect(nullBudget.hasBudget).toBe(false);
       expect(nullBudget.isZeroBudget).toBe(false);
       expect(nullBudget.remainingBudgetPaise).toBeNull();
       expect(nullBudget.actualBudgetPercent).toBeNull();
       expect(nullBudget.visualProgress).toBe(0);
+      expect(nullBudget.usageLabel).toBeNull();
 
-      const zeroBudget = computeBudgetMetrics(0, 0);
+      const zeroBudget = calculateBudgetMetrics(0, 0);
       expect(zeroBudget.hasBudget).toBe(true);
       expect(zeroBudget.isZeroBudget).toBe(true);
     });
 
     it('handles ₹0 budget with ₹0 spending: displays 0 remaining, 0% used, on-track', () => {
-      const result = computeBudgetMetrics(0, 0);
+      const result = calculateBudgetMetrics(0, 0);
       expect(result.remainingBudgetPaise).toBe(0);
       expect(result.isOverBudget).toBe(false);
       expect(result.actualBudgetPercent).toBeNull(); // No NaN/Infinity
+      expect(Number.isNaN(result.actualBudgetPercent)).toBe(false);
       expect(result.visualProgress).toBe(0);
       expect(result.usageLabel).toBe('0% used');
       expect(result.statusPill).toBe('On Track');
@@ -319,7 +283,7 @@ describe('finance utilities', () => {
 
     it('handles ₹0 budget with positive spending: displays actual deficit and over-zero-limit warning without NaN or Infinity', () => {
       const spendingPaise = 50000; // ₹500
-      const result = computeBudgetMetrics(0, spendingPaise);
+      const result = calculateBudgetMetrics(0, spendingPaise);
       expect(result.remainingBudgetPaise).toBe(-50000);
       expect(result.isOverBudget).toBe(true);
       expect(result.actualBudgetPercent).toBeNull(); // Never divides by zero
@@ -332,7 +296,7 @@ describe('finance utilities', () => {
     it('preserves existing positive budget calculations when on track', () => {
       const budgetPaise = 1000000; // ₹10,000
       const spendingPaise = 400000; // ₹4,000
-      const result = computeBudgetMetrics(budgetPaise, spendingPaise);
+      const result = calculateBudgetMetrics(budgetPaise, spendingPaise);
       expect(result.remainingBudgetPaise).toBe(600000); // ₹6,000 remaining
       expect(result.isOverBudget).toBe(false);
       expect(result.actualBudgetPercent).toBe(40);
@@ -344,7 +308,7 @@ describe('finance utilities', () => {
     it('preserves existing positive budget calculations when over budget', () => {
       const budgetPaise = 1000000; // ₹10,000
       const spendingPaise = 1250000; // ₹12,500
-      const result = computeBudgetMetrics(budgetPaise, spendingPaise);
+      const result = calculateBudgetMetrics(budgetPaise, spendingPaise);
       expect(result.remainingBudgetPaise).toBe(-250000); // -₹2,500 deficit
       expect(result.isOverBudget).toBe(true);
       expect(result.actualBudgetPercent).toBe(125);

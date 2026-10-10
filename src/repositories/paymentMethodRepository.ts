@@ -1,5 +1,6 @@
 import { db } from '../db/db';
 import { PaymentMethod } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 export const DEFAULT_PAYMENT_METHODS: string[] = [
   'Cash',
@@ -42,7 +43,7 @@ export const paymentMethodRepository = {
         if (count === 0) {
           const now = new Date().toISOString();
           const initialMethods: PaymentMethod[] = DEFAULT_PAYMENT_METHODS.map((methodName) => ({
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             name: methodName,
             isActive: true,
             createdAt: now,
@@ -92,7 +93,7 @@ export const paymentMethodRepository = {
 
     const now = new Date().toISOString();
     const newMethod: PaymentMethod = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: trimmed,
       isActive: true,
       createdAt: now,

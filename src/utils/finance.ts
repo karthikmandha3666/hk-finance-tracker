@@ -390,3 +390,62 @@ export const calculateIncomeVsExpense = (
     isDeficit,
   };
 };
+
+export interface BudgetMetrics {
+  hasBudget: boolean;
+  isZeroBudget: boolean;
+  remainingBudgetPaise: number | null;
+  isOverBudget: boolean;
+  actualBudgetPercent: number | null;
+  visualProgress: number;
+  usageLabel: string | null;
+  statusPill: string;
+}
+
+/**
+ * Calculates budget metrics (usage percentage, visual progress, remaining amount, status pill).
+ * Strictly guards against division by zero: when monthlyBudgetPaise is 0 or null,
+ * actualBudgetPercent is null, preventing NaN and Infinity.
+ */
+export const calculateBudgetMetrics = (
+  monthlyBudgetPaise: number | null,
+  totalSpendingPaise: number
+): BudgetMetrics => {
+  const hasBudget = monthlyBudgetPaise !== null;
+  const isZeroBudget = monthlyBudgetPaise === 0;
+  const remainingBudgetPaise = hasBudget ? monthlyBudgetPaise - totalSpendingPaise : null;
+  const isOverBudget = remainingBudgetPaise !== null && remainingBudgetPaise < 0;
+
+  // Actual usage percentage (strictly avoids division by zero, NaN, or Infinity)
+  const actualBudgetPercent =
+    hasBudget && monthlyBudgetPaise > 0
+      ? Math.round((totalSpendingPaise / monthlyBudgetPaise) * 1000) / 10
+      : null;
+
+  const visualProgress = isZeroBudget
+    ? (totalSpendingPaise > 0 ? 100 : 0)
+    : (actualBudgetPercent !== null ? Math.min(100, Math.max(0, actualBudgetPercent)) : 0);
+
+  const usageLabel = isZeroBudget
+    ? (totalSpendingPaise > 0
+        ? `Over ₹0 limit by ₹${formatPaiseToRupees(totalSpendingPaise)}`
+        : '0% used')
+    : (actualBudgetPercent !== null
+        ? `${actualBudgetPercent.toLocaleString('en-IN', { maximumFractionDigits: 1 })}% used`
+        : null);
+
+  const statusPill = isOverBudget
+    ? (isZeroBudget ? 'Over ₹0 Limit' : 'Over Budget')
+    : 'On Track';
+
+  return {
+    hasBudget,
+    isZeroBudget,
+    remainingBudgetPaise,
+    isOverBudget,
+    actualBudgetPercent,
+    visualProgress,
+    usageLabel,
+    statusPill,
+  };
+};
