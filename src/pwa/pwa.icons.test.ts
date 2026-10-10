@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 
-describe('BUG-05 Regression: PWA icon assets and manifest configurations', () => {
+describe('PWA icon assets and manifest configurations — Soft Halo ₹ (Midnight Cyan)', () => {
   const publicDir = path.resolve('public');
 
   function readPngDimensions(filePath: string) {
@@ -23,40 +24,61 @@ describe('BUG-05 Regression: PWA icon assets and manifest configurations', () =>
     return { width, height, sizeBytes: buf.length };
   }
 
-  it('provides polished standard PWA 192x192 icon', () => {
+  it('provides polished standard PWA 192x192 icon with transparent corners', async () => {
     const pwa192Path = path.join(publicDir, 'pwa-192x192.png');
     expect(fs.existsSync(pwa192Path)).toBe(true);
     const { width, height, sizeBytes } = readPngDimensions(pwa192Path);
     expect(width).toBe(192);
     expect(height).toBe(192);
-    expect(sizeBytes).toBeGreaterThan(10000); // Polished high-res asset
+    expect(sizeBytes).toBeGreaterThan(2000);
+
+    const meta = await sharp(pwa192Path).metadata();
+    expect(meta.hasAlpha).toBe(true);
+    const { data, info } = await sharp(pwa192Path).raw().toBuffer({ resolveWithObject: true });
+    expect(info.channels).toBe(4);
+    // Check top-left corner pixel (x=0, y=0) alpha channel is 0 (transparent)
+    expect(data[3]).toBe(0);
   });
 
-  it('provides polished standard PWA 512x512 icon', () => {
+  it('provides polished standard PWA 512x512 icon with transparent corners', async () => {
     const pwa512Path = path.join(publicDir, 'pwa-512x512.png');
     expect(fs.existsSync(pwa512Path)).toBe(true);
     const { width, height, sizeBytes } = readPngDimensions(pwa512Path);
     expect(width).toBe(512);
     expect(height).toBe(512);
-    expect(sizeBytes).toBeGreaterThan(30000);
+    expect(sizeBytes).toBeGreaterThan(5000);
+
+    const meta = await sharp(pwa512Path).metadata();
+    expect(meta.hasAlpha).toBe(true);
+    const { data, info } = await sharp(pwa512Path).raw().toBuffer({ resolveWithObject: true });
+    expect(info.channels).toBe(4);
+    expect(data[3]).toBe(0);
   });
 
-  it('provides polished maskable PWA 512x512 icon with safe-zone margin', () => {
+  it('provides full-bleed opaque maskable PWA 512x512 icon with safe-zone margin', async () => {
     const maskablePath = path.join(publicDir, 'pwa-maskable-512x512.png');
     expect(fs.existsSync(maskablePath)).toBe(true);
     const { width, height, sizeBytes } = readPngDimensions(maskablePath);
     expect(width).toBe(512);
     expect(height).toBe(512);
-    expect(sizeBytes).toBeGreaterThan(30000);
+    expect(sizeBytes).toBeGreaterThan(5000);
+
+    const meta = await sharp(maskablePath).metadata();
+    // Maskable must be full-bleed opaque, no transparency
+    expect(meta.hasAlpha).toBe(false);
   });
 
-  it('provides Apple Touch Icon at 180x180', () => {
+  it('provides Apple Touch Icon at 180x180 full-bleed and opaque', async () => {
     const appleIconPath = path.join(publicDir, 'apple-touch-icon.png');
     expect(fs.existsSync(appleIconPath)).toBe(true);
     const { width, height, sizeBytes } = readPngDimensions(appleIconPath);
     expect(width).toBe(180);
     expect(height).toBe(180);
-    expect(sizeBytes).toBeGreaterThan(10000);
+    expect(sizeBytes).toBeGreaterThan(2000);
+
+    const meta = await sharp(appleIconPath).metadata();
+    // Apple touch icon must be full-bleed opaque, no transparency
+    expect(meta.hasAlpha).toBe(false);
   });
 
   it('provides Spendly vector favicon.svg and preserves spendly-emblem.png for splash screen', () => {
@@ -64,7 +86,8 @@ describe('BUG-05 Regression: PWA icon assets and manifest configurations', () =>
     expect(fs.existsSync(faviconPath)).toBe(true);
     const svgContent = fs.readFileSync(faviconPath, 'utf8');
     expect(svgContent).toContain('<svg');
-    expect(svgContent).toContain('brandGrad');
+    expect(svgContent).toContain('linearGradient');
+    expect(svgContent).toContain('#38BDF8'); // Cyan rupee stroke
 
     const emblemPath = path.join(publicDir, 'spendly-emblem.png');
     expect(fs.existsSync(emblemPath)).toBe(true);

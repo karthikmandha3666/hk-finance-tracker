@@ -18,6 +18,8 @@ vi.mock('dexie-react-hooks', () => ({
 vi.mock('../repositories/expenseRepository', () => ({
   expenseRepository: {
     deleteExpense: vi.fn(),
+    deleteExpenses: vi.fn(),
+    getExpenseById: vi.fn().mockResolvedValue({ id: 'exp-123' }),
   },
 }));
 
@@ -454,5 +456,97 @@ describe('ExpensesView filter visibility and clearing behavior (DEF-04)', () => 
     const exportBtnPopulated = container.querySelector('.btn-expenses-export-month') as HTMLButtonElement;
     expect(exportBtnPopulated).not.toBeNull();
     expect(exportBtnPopulated.disabled).toBe(false);
+  });
+
+  it('filters transactions dynamically by search input query', async () => {
+    await act(async () => {
+      root.render(
+        <ExpensesView
+          months={mockMonths}
+          selectedMonthId="2026-10"
+          onSelectMonth={vi.fn()}
+          expenses={multipleExpenses}
+          onAddExpenseClick={vi.fn()}
+          onEditExpense={vi.fn()}
+        />
+      );
+    });
+
+    const searchInput = container.querySelector('.expenses-search-input') as HTMLInputElement;
+    expect(searchInput).not.toBeNull();
+
+    // Search for "Groceries" (only exp-3 matches)
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(searchInput, 'Groceries');
+      (searchInput as any)._valueTracker?.setValue('');
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    // Check filtered transaction count
+    const items = container.querySelectorAll('.expense-ledger-item');
+    expect(items.length).toBe(1);
+    expect(items[0].textContent).toContain('Groceries');
+  });
+
+  it('supports bulk selection mode and multi-delete of selected transactions', async () => {
+    vi.mocked(expenseRepository.deleteExpenses).mockResolvedValueOnce();
+
+    await act(async () => {
+      root.render(
+        <ExpensesView
+          months={mockMonths}
+          selectedMonthId="2026-10"
+          onSelectMonth={vi.fn()}
+          expenses={multipleExpenses}
+          onAddExpenseClick={vi.fn()}
+          onEditExpense={vi.fn()}
+        />
+      );
+    });
+
+    // Toggle selection mode
+    const selectModeBtn = container.querySelector('.btn-expenses-select-mode') as HTMLButtonElement;
+    expect(selectModeBtn).not.toBeNull();
+
+    await act(async () => {
+      selectModeBtn.click();
+    });
+
+    // Bulk selection toolbar should appear
+    const bulkToolbar = container.querySelector('.bulk-selection-bar');
+    expect(bulkToolbar).not.toBeNull();
+
+    // Click "Select All"
+    const selectAllBtn = container.querySelector('.btn-bulk-select-all') as HTMLButtonElement;
+    await act(async () => {
+      selectAllBtn.click();
+    });
+
+    // Selected count text should indicate 3 selected
+    const countText = container.querySelector('.bulk-selected-count');
+    expect(countText?.textContent).toContain('3 selected');
+
+    // Click Delete Selected
+    const bulkDeleteBtn = container.querySelector('.btn-bulk-delete') as HTMLButtonElement;
+    await act(async () => {
+      bulkDeleteBtn.click();
+    });
+
+    // Bulk delete confirmation modal should open
+    const modalTitle = container.querySelector('.modal-title');
+    expect(modalTitle?.textContent).toContain('Delete 3 Transactions?');
+
+    // Confirm deletion
+    const confirmDeleteBtn = container.querySelector('.btn-modal-delete') as HTMLButtonElement;
+    await act(async () => {
+      confirmDeleteBtn.click();
+    });
+
+    // expenseRepository.deleteExpenses should have been called with all 3 IDs
+    expect(expenseRepository.deleteExpenses).toHaveBeenCalledTimes(1);
+    expect(expenseRepository.deleteExpenses).toHaveBeenCalledWith(
+      expect.arrayContaining(['exp-1', 'exp-2', 'exp-3'])
+    );
   });
 });

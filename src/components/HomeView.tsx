@@ -19,6 +19,11 @@ import {
   calculateIncomeVsExpense,
   calculateBudgetMetrics,
 } from '../utils/finance';
+import {
+  calculateSpendingTrends,
+  detectUnusualCategorySpending,
+  calculateMonthOverMonthInsight,
+} from '../utils/insights';
 
 export interface HomeViewProps {
   months: MonthData[];
@@ -228,10 +233,28 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const showUpcomingObligations = dashboardPrefs?.showUpcomingObligations ?? true;
   const showLoansSummary = dashboardPrefs?.showLoansSummary ?? true;
 
-  // Stage 9: Month-over-Month Comparison
+  // Stage 9 & 11: Month-over-Month Comparison
   const momResult = useMemo(
     () => calculateMonthOverMonth(totalSpendingPaise, prevTotalSpendingPaise),
     [totalSpendingPaise, prevTotalSpendingPaise]
+  );
+
+  // Stage 11: Historical expenses for 6-month visual velocity trends & anomaly detection
+  const allHistoricalExpenses = useLiveQuery(() => expenseRepository.getExpenses(), []) ?? [];
+
+  const spendingTrends = useMemo(
+    () => calculateSpendingTrends(allHistoricalExpenses, selectedMonthId, 6),
+    [allHistoricalExpenses, selectedMonthId]
+  );
+
+  const unusualSpendingFlags = useMemo(
+    () => detectUnusualCategorySpending(expenses, allHistoricalExpenses, selectedMonthId),
+    [expenses, allHistoricalExpenses, selectedMonthId]
+  );
+
+  const momInsight = useMemo(
+    () => calculateMonthOverMonthInsight(totalSpendingPaise, prevTotalSpendingPaise, prevMonthLabel),
+    [totalSpendingPaise, prevTotalSpendingPaise, prevMonthLabel]
   );
 
   // Stage 9: Income vs Expense Analytics (Net Savings & Savings Rate)
@@ -368,6 +391,66 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </span>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Stage 11: Unusual Category Spending Alert (if flagged) */}
+      {unusualSpendingFlags.length > 0 && (
+        <section className="unusual-spending-section">
+          {unusualSpendingFlags.map((flag) => (
+            <div key={flag.category} className="unusual-spending-banner" role="alert">
+              <div className="unusual-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <div className="unusual-content">
+                <div className="unusual-title-row">
+                  <span className="unusual-title">Elevated Spending: {flag.category}</span>
+                  <span className="unusual-badge">+{flag.percentAboveAverage}%</span>
+                </div>
+                <p className="unusual-reason">{flag.reason}</p>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Stage 11: 6-Month Visual Spending Velocity Trend Card */}
+      <section className="insights-cockpit-card">
+        <div className="insights-card-header">
+          <span className="insights-card-title">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+            6-Month Spending Velocity
+          </span>
+          <span className="section-subtext" style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+            {momInsight.description}
+          </span>
+        </div>
+
+        <div className="trend-bars-container" aria-label="6-month spending chart">
+          {spendingTrends.map((bar) => (
+            <div key={bar.monthId} className="trend-bar-col">
+              <span className="trend-bar-amount">
+                {bar.totalPaise > 0 ? `₹${formatPaiseToRupees(bar.totalPaise)}` : '₹0'}
+              </span>
+              <div className="trend-bar-fill-track">
+                <div
+                  className={`trend-bar-fill ${bar.isCurrent ? 'current' : ''}`}
+                  style={{ height: `${Math.max(6, bar.percentageOfPeak)}%` }}
+                />
+              </div>
+              <span className={`trend-bar-month ${bar.isCurrent ? 'current' : ''}`}>
+                {bar.shortLabel}
+              </span>
+            </div>
+          ))}
         </div>
       </section>
 

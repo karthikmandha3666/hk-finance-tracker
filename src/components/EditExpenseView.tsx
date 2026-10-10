@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Expense } from '../types';
 import { expenseRepository } from '../repositories/expenseRepository';
@@ -236,9 +236,12 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
     }
   };
 
-  const handleConfirmDelete = async () => {
-    if (isDeleting || isSaving) return;
+  const isDeletingRef = useRef<boolean>(false);
 
+  const handleConfirmDelete = async () => {
+    if (isDeletingRef.current || isDeleting || isSaving) return;
+
+    isDeletingRef.current = true;
     setIsDeleting(true);
     setDeleteError(null);
 
@@ -256,8 +259,24 @@ export const EditExpenseView: React.FC<EditExpenseViewProps> = ({
       }
     } catch (err) {
       console.error('Failed to delete expense from IndexedDB:', err);
+      try {
+        const stillExists = await expenseRepository.getExpenseById(expense.id);
+        if (!stillExists) {
+          setShowDeleteConfirm(false);
+          onDirtyChange?.(false);
+          if (onExpenseDeleted) {
+            onExpenseDeleted();
+          } else {
+            onCancel();
+          }
+          return;
+        }
+      } catch {
+        // Ignore check error
+      }
       setDeleteError('Unable to delete expense. Please try again.');
     } finally {
+      isDeletingRef.current = false;
       setIsDeleting(false);
     }
   };

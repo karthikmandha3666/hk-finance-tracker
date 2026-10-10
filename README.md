@@ -2,7 +2,7 @@
 
 > **Spend smart. Live better. Make every rupee count.**
 >
-> Version: **v0.1.0** — Local-First Personal Finance Progressive Web Application (PWA).
+> Version: **v1.0.0** — Production Local-First Personal Finance Progressive Web Application (PWA).
 
 Live Deployment: [https://karthikmandha3666.github.io/hk-finance-tracker/](https://karthikmandha3666.github.io/hk-finance-tracker/)
 

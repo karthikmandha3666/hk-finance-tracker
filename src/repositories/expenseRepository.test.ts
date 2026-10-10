@@ -105,4 +105,90 @@ describe('BUG-01 Regression: expense persistence and multi-month retrieval acros
 
     reloadedDb.close();
   });
+
+  it('safely and idempotently deletes an expense without throwing when non-existent', async () => {
+    const expense: Expense = {
+      id: 'exp-to-del-1',
+      amountInPaise: 12000,
+      category: 'Food',
+      paymentMethod: 'UPI',
+      date: '2026-10-10',
+      note: 'Snacks',
+      currency: 'INR',
+      createdAt: '2026-10-10T14:00:00.000Z',
+      updatedAt: '2026-10-10T14:00:00.000Z',
+    };
+    await testDb.expenses.add(expense);
+
+    // Initial count is 1
+    expect(await testDb.expenses.count()).toBe(1);
+
+    // First delete succeeds
+    await testDb.transaction('rw', testDb.expenses, async () => {
+      await testDb.expenses.delete('exp-to-del-1');
+    });
+    expect(await testDb.expenses.count()).toBe(0);
+
+    // Subsequent delete of same ID is idempotent (does NOT throw or corrupt state)
+    await expect(
+      testDb.transaction('rw', testDb.expenses, async () => {
+        await testDb.expenses.delete('exp-to-del-1');
+      })
+    ).resolves.not.toThrow();
+
+    // Deleting a non-existent ID does not throw
+    await expect(
+      testDb.transaction('rw', testDb.expenses, async () => {
+        await testDb.expenses.delete('non-existent-id');
+      })
+    ).resolves.not.toThrow();
+  });
+
+  it('atomically deletes multiple expenses via bulkDelete without leaving orphaned records', async () => {
+    const exp1: Expense = {
+      id: 'bulk-1',
+      amountInPaise: 10000,
+      category: 'Bills',
+      paymentMethod: 'UPI',
+      date: '2026-10-01',
+      note: 'Water bill',
+      currency: 'INR',
+      createdAt: '2026-10-01T10:00:00.000Z',
+      updatedAt: '2026-10-01T10:00:00.000Z',
+    };
+    const exp2: Expense = {
+      id: 'bulk-2',
+      amountInPaise: 20000,
+      category: 'Bills',
+      paymentMethod: 'UPI',
+      date: '2026-10-02',
+      note: 'Power bill',
+      currency: 'INR',
+      createdAt: '2026-10-02T10:00:00.000Z',
+      updatedAt: '2026-10-02T10:00:00.000Z',
+    };
+    const exp3: Expense = {
+      id: 'bulk-3',
+      amountInPaise: 30000,
+      category: 'Rent',
+      paymentMethod: 'Net Banking',
+      date: '2026-10-05',
+      note: 'Room rent',
+      currency: 'INR',
+      createdAt: '2026-10-05T10:00:00.000Z',
+      updatedAt: '2026-10-05T10:00:00.000Z',
+    };
+
+    await testDb.expenses.bulkAdd([exp1, exp2, exp3]);
+    expect(await testDb.expenses.count()).toBe(3);
+
+    // Delete exp1 and exp2 in a single atomic transaction
+    await testDb.transaction('rw', testDb.expenses, async () => {
+      await testDb.expenses.bulkDelete(['bulk-1', 'bulk-2']);
+    });
+
+    expect(await testDb.expenses.count()).toBe(1);
+    const remaining = await testDb.expenses.toArray();
+    expect(remaining[0].id).toBe('bulk-3');
+  });
 });

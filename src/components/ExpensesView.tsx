@@ -17,6 +17,8 @@ export interface ExpensesViewProps {
   onEditExpense: (expense: Expense) => void;
 }
 
+export type SortOption = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc';
+
 const getCategoryIconClass = (cat: string): string => {
   switch (cat) {
     case 'Food': return 'food';
@@ -103,23 +105,37 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   onAddExpenseClick,
   onEditExpense,
 }) => {
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('');
   const [selectedMethodFilter, setSelectedMethodFilter] = useState<string>('');
+  const [sortOption, setSortOption] = useState<SortOption>('date-desc');
+
+  // Multi-Selection State (Stage 13)
+  const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Deletion state with concurrency protection (Step 1 & Step 4)
   const [expensePendingDelete, setExpensePendingDelete] = useState<Expense | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const isDeletingRef = useRef<boolean>(false);
 
-  // Reset filters when navigating across months to make ledger behavior clear and predictable (MAS-12)
+  // Reset filters and selection when navigating across months (MAS-12)
   const prevMonthRef = useRef(selectedMonthId);
   useEffect(() => {
     if (prevMonthRef.current !== selectedMonthId) {
       prevMonthRef.current = selectedMonthId;
       setSelectedCategoryFilter('');
       setSelectedMethodFilter('');
+      setSearchQuery('');
+      setIsSelectionMode(false);
+      setSelectedIds(new Set());
     }
   }, [selectedMonthId]);
 
-  // Available categories & payment methods for filter dropdowns
+  // Available categories & payment methods from IndexedDB configuration
   const activeCategories = useLiveQuery(() => categoryRepository.getActiveCategories()) ?? [];
   const activeMethods = useLiveQuery(() => paymentMethodRepository.getActivePaymentMethods()) ?? [];
 
@@ -136,55 +152,143 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
     return Array.from(new Set([...fromExpenses, ...fromConfig])).sort();
   }, [expenses, activeMethods]);
 
-  // Sort expenses: newest date first, then newest createdAt first
-  const sortedExpenses = useMemo(() => {
-    return [...expenses].sort((a, b) => {
-      if (a.date !== b.date) {
-        return b.date.localeCompare(a.date);
-      }
-      return b.createdAt.localeCompare(a.createdAt);
-    });
-  }, [expenses]);
-
-  // Apply filters
+  // Filtering: combines Category, Payment Method, and Free-text Search
   const filteredExpenses = useMemo(() => {
-    return sortedExpenses.filter((item) => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return expenses.filter((item) => {
+      // Category filter
       if (selectedCategoryFilter && item.category !== selectedCategoryFilter) {
         return false;
       }
+      // Payment method filter
       if (selectedMethodFilter && item.paymentMethod !== selectedMethodFilter) {
         return false;
       }
+      // Search query filter (matches category, note, payment method, or rupee amount)
+      if (query) {
+        const catMatch = (item.category || '').toLowerCase().includes(query);
+        const noteMatch = (item.note || '').toLowerCase().includes(query);
+        const methodMatch = (item.paymentMethod || '').toLowerCase().includes(query);
+        const amountStr = formatPaiseToRupees(item.amountInPaise).replace(/,/g, '');
+        const amountMatch = amountStr.includes(query);
+        if (!catMatch && !noteMatch && !methodMatch && !amountMatch) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [sortedExpenses, selectedCategoryFilter, selectedMethodFilter]);
+  }, [expenses, selectedCategoryFilter, selectedMethodFilter, searchQuery]);
+
+  // Sorting: newest, oldest, highest amount, lowest amount
+  const sortedExpenses = useMemo(() => {
+    return [...filteredExpenses].sort((a, b) => {
+      switch (sortOption) {
+        case 'date-asc': {
+          if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
+          return (a.createdAt || '').localeCompare(b.createdAt || '');
+        }
+        case 'amount-desc': {
+          return b.amountInPaise - a.amountInPaise;
+        }
+        case 'amount-asc': {
+          return a.amountInPaise - b.amountInPaise;
+        }
+        case 'date-desc':
+        default: {
+          if (a.date !== b.date) return (b.date || '').localeCompare(a.date || '');
+          return (b.createdAt || '').localeCompare(a.createdAt || '');
+        }
+      }
+    });
+  }, [filteredExpenses, sortOption]);
 
   // Metrics
   const totalMonthSpendingPaise = useMemo(() => sumExpenses(expenses), [expenses]);
   const totalFilteredSpendingPaise = useMemo(() => sumExpenses(filteredExpenses), [filteredExpenses]);
+
+  // Selected totals for bulk actions
+  const selectedExpenses = useMemo(() => {
+    return sortedExpenses.filter((e) => selectedIds.has(e.id));
+  }, [sortedExpenses, selectedIds]);
+  const selectedSpendingPaise = useMemo(() => sumExpenses(selectedExpenses), [selectedExpenses]);
 
   const currentMonthData = useMemo(() => {
     const found = months.find((m) => m.id === selectedMonthId);
     return found || { id: selectedMonthId, label: selectedMonthId, shortLabel: selectedMonthId };
   }, [months, selectedMonthId]);
 
+  // Multi-Selection Handlers (Stage 13)
+  const toggleSelectionMode = () => {
+    if (isSelectionMode) {
+      setIsSelectionMode(false);
+      setSelectedIds(new Set());
+    } else {
+      setIsSelectionMode(true);
+    }
+  };
+
+  const toggleSelectExpense = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === sortedExpenses.length && sortedExpenses.length > 0) {
+      // Unselect all
+      setSelectedIds(new Set());
+    } else {
+      // Select all currently visible filtered records
+      setSelectedIds(new Set(sortedExpenses.map((e) => e.id)));
+    }
+  };
+
+  // Single Deletion Handlers with Concurrency Guard (Step 1)
   const handleRequestDelete = (e: React.MouseEvent, item: Expense) => {
     e.stopPropagation();
+    if (isDeleting) return;
     setDeleteError(null);
     setExpensePendingDelete(item);
   };
 
   const handleConfirmDelete = async () => {
-    if (!expensePendingDelete || isDeleting) return;
+    if (!expensePendingDelete || isDeletingRef.current || isDeleting) return;
+    isDeletingRef.current = true;
     setIsDeleting(true);
     setDeleteError(null);
+
     try {
       await expenseRepository.deleteExpense(expensePendingDelete.id);
       setExpensePendingDelete(null);
+      // Remove from selection set if present
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(expensePendingDelete.id);
+        return next;
+      });
     } catch (err) {
       console.error('Failed to delete expense:', err);
+      try {
+        const stillExists = await expenseRepository.getExpenseById(expensePendingDelete.id);
+        if (!stillExists) {
+          // Already deleted by a concurrent operation; dismiss modal cleanly!
+          setExpensePendingDelete(null);
+          return;
+        }
+      } catch {
+        // Ignore check error
+      }
       setDeleteError('Unable to delete expense. Please try again.');
     } finally {
+      isDeletingRef.current = false;
       setIsDeleting(false);
     }
   };
@@ -196,7 +300,37 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
     }
   };
 
-  const hasActiveFilters = Boolean(selectedCategoryFilter || selectedMethodFilter);
+  // Bulk Deletion Handlers (Stage 13)
+  const handleConfirmBulkDelete = async () => {
+    if (selectedIds.size === 0 || isDeletingRef.current || isDeleting) return;
+    isDeletingRef.current = true;
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    const idsToDelete = Array.from(selectedIds);
+    try {
+      await expenseRepository.deleteExpenses(idsToDelete);
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+      setShowBulkDeleteConfirm(false);
+    } catch (err) {
+      console.error('Failed to bulk delete expenses:', err);
+      setDeleteError('Failed to delete selected expenses. Please try again.');
+    } finally {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
+    }
+  };
+
+  const hasActiveFilters = Boolean(
+    selectedCategoryFilter || selectedMethodFilter || searchQuery.trim()
+  );
+
+  const clearAllFilters = () => {
+    setSelectedCategoryFilter('');
+    setSelectedMethodFilter('');
+    setSearchQuery('');
+  };
 
   const handleExportMonthCsv = () => {
     if (expenses.length === 0) return;
@@ -206,14 +340,14 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
   return (
     <div className="expenses-view-container">
-      {/* Month Selector */}
+      {/* Month Selector Bar */}
       <MonthSelector
         months={months}
         selectedMonthId={selectedMonthId}
         onSelectMonth={onSelectMonth}
       />
 
-      {/* Expenses Overview Hero Banner */}
+      {/* Transaction Workspace Header */}
       <section className="expenses-hero-card">
         <div className="expenses-hero-top">
           <div className="expenses-hero-text">
@@ -223,38 +357,33 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               <span>{formatPaiseToRupees(totalMonthSpendingPaise)}</span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`btn-expenses-select-mode ${isSelectionMode ? 'active' : ''}`}
+              onClick={toggleSelectionMode}
+              aria-pressed={isSelectionMode}
+            >
+              {isSelectionMode ? 'Done' : 'Select'}
+            </button>
             <button
               type="button"
               className="btn-expenses-export-month"
               onClick={handleExportMonthCsv}
               disabled={expenses.length === 0}
               title={`Export ${currentMonthData.shortLabel} expenses to CSV`}
-              aria-label={`Export ${currentMonthData.shortLabel} expenses to CSV`}
             >
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               <span>Export CSV</span>
             </button>
-            <button
-              type="button"
-              className="btn-expenses-add-hero"
-              onClick={onAddExpenseClick}
-              aria-label="Add new expense"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              <span>Add Expense</span>
-            </button>
           </div>
         </div>
 
-        <div className="expenses-hero-meta">
+        <div className="expenses-hero-bottom">
           <span className="expenses-hero-count">
             {expenses.length} {expenses.length === 1 ? 'transaction' : 'transactions'}
           </span>
@@ -266,54 +395,122 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         </div>
       </section>
 
-      {/* Filter Control Bar */}
-      <div className="expenses-filter-bar">
-        <div className="filter-group">
-          <label htmlFor="filter-category-select" className="filter-label">Category</label>
-          <select
-            id="filter-category-select"
-            className="filter-select"
-            value={selectedCategoryFilter}
-            onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-            aria-label="Filter expenses by category"
-          >
-            <option value="">All Categories ({availableCategories.length})</option>
-            {availableCategories.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-        </div>
+      {/* Bulk Selection Bar (Stage 13) */}
+      {isSelectionMode && (
+        <div className="bulk-selection-bar" role="toolbar" aria-label="Bulk actions toolbar">
+          <div className="bulk-selection-left">
+            <button
+              type="button"
+              className="btn-bulk-select-all"
+              onClick={handleSelectAll}
+            >
+              {selectedIds.size === sortedExpenses.length && sortedExpenses.length > 0
+                ? 'Deselect All'
+                : `Select All (${sortedExpenses.length})`}
+            </button>
+            <span className="bulk-selected-count">
+              <strong>{selectedIds.size}</strong> selected (₹{formatPaiseToRupees(selectedSpendingPaise)})
+            </span>
+          </div>
 
-        <div className="filter-group">
-          <label htmlFor="filter-method-select" className="filter-label">Payment</label>
-          <select
-            id="filter-method-select"
-            className="filter-select"
-            value={selectedMethodFilter}
-            onChange={(e) => setSelectedMethodFilter(e.target.value)}
-            aria-label="Filter expenses by payment method"
-          >
-            <option value="">All Methods ({availableMethods.length})</option>
-            {availableMethods.map((pm) => (
-              <option key={pm} value={pm}>{pm}</option>
-            ))}
-          </select>
-        </div>
-
-        {hasActiveFilters && (
           <button
             type="button"
-            className="btn-filter-clear"
+            className="btn-bulk-delete"
+            disabled={selectedIds.size === 0 || isDeleting}
             onClick={() => {
-              setSelectedCategoryFilter('');
-              setSelectedMethodFilter('');
+              setDeleteError(null);
+              setShowBulkDeleteConfirm(true);
             }}
-            title="Clear filters"
-            aria-label="Clear all filters"
           >
-            Clear
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            <span>Delete Selected ({selectedIds.size})</span>
           </button>
-        )}
+        </div>
+      )}
+
+      {/* Search & Filter Control Bar (Stage 13) */}
+      <div className="expenses-filter-bar">
+        {/* Free-text search input */}
+        <div className="expenses-search-group">
+          <div className="expenses-search-wrapper">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              className="expenses-search-input"
+              placeholder="Search notes, categories, payment..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search transactions"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="btn-search-clear"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search input"
+              >
+                &times;
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Filter dropdowns row */}
+        <div className="expenses-filters-row">
+          <div className="filter-group">
+            <label htmlFor="filter-category-select" className="filter-label">Category</label>
+            <select
+              id="filter-category-select"
+              className="filter-select"
+              value={selectedCategoryFilter}
+              onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+              aria-label="Filter expenses by category"
+            >
+              <option value="">All Categories ({availableCategories.length})</option>
+              {availableCategories.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="filter-method-select" className="filter-label">Payment</label>
+            <select
+              id="filter-method-select"
+              className="filter-select"
+              value={selectedMethodFilter}
+              onChange={(e) => setSelectedMethodFilter(e.target.value)}
+              aria-label="Filter expenses by payment method"
+            >
+              <option value="">All Methods ({availableMethods.length})</option>
+              {availableMethods.map((pm) => (
+                <option key={pm} value={pm}>{pm}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="filter-sort-select" className="filter-label">Sort</label>
+            <select
+              id="filter-sort-select"
+              className="filter-select"
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+              aria-label="Sort transactions"
+            >
+              <option value="date-desc">Newest First</option>
+              <option value="date-asc">Oldest First</option>
+              <option value="amount-desc">Highest Amount</option>
+              <option value="amount-asc">Lowest Amount</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Active Filter Visibility & Clearing Banner (DEF-04) */}
@@ -330,6 +527,9 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                 Showing <strong>{filteredExpenses.length}</strong> of <strong>{expenses.length}</strong> transactions
               </span>
               <div className="active-filter-chips">
+                {searchQuery && (
+                  <span className="active-filter-tag">Search: &quot;{searchQuery}&quot;</span>
+                )}
                 {selectedCategoryFilter && (
                   <span className="active-filter-tag">Category: {selectedCategoryFilter}</span>
                 )}
@@ -342,10 +542,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           <button
             type="button"
             className="btn-clear-filters-banner"
-            onClick={() => {
-              setSelectedCategoryFilter('');
-              setSelectedMethodFilter('');
-            }}
+            onClick={clearAllFilters}
             aria-label="Clear all active filters"
           >
             Clear Filters
@@ -385,90 +582,120 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         ) : filteredExpenses.length === 0 ? (
           <div className="empty-expenses-box">
             <p className="empty-expenses-title">No expenses match the selected filters</p>
-            <p className="empty-expenses-subtitle">Try clearing or changing your category or payment method filters.</p>
+            <p className="empty-expenses-subtitle">Try clearing your search query or changing filters.</p>
             <button
               type="button"
               className="btn-empty-add"
-              onClick={() => {
-                setSelectedCategoryFilter('');
-                setSelectedMethodFilter('');
-              }}
+              onClick={clearAllFilters}
             >
               Reset Filters
             </button>
           </div>
         ) : (
           <div className="expenses-ledger-list">
-            {filteredExpenses.map((item) => (
-              <article
-                key={item.id}
-                className="expense-ledger-item"
-                role="button"
-                tabIndex={0}
-                onClick={() => onEditExpense(item)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onEditExpense(item);
-                  }
-                }}
-                aria-label={`Edit ${item.category} expense: ₹${formatPaiseToRupees(item.amountInPaise)}, ${item.date}`}
-              >
-                <div className={`expense-icon-box ${getCategoryIconClass(item.category)}`}>
-                  {renderCategoryIcon(item.category)}
-                </div>
-
-                <div className="expense-details">
-                  <div className="expense-primary-info">
-                    <span className="expense-category" title={item.category}>{item.category}</span>
-                    <span className="expense-amount">
-                      -₹{formatPaiseToRupees(item.amountInPaise)}
-                    </span>
-                  </div>
-                  <div className="expense-secondary-info">
-                    <span className="expense-meta" title={`${item.date} • ${item.paymentMethod}`}>
-                      {item.date} &bull; {item.paymentMethod}
-                    </span>
-                    {item.note && <span className="expense-note" title={item.note}>{item.note}</span>}
-                  </div>
-                </div>
-
-                <div className="expense-ledger-actions">
-                  <button
-                    type="button"
-                    className="btn-ledger-action edit"
-                    onClick={(e) => {
-                      e.stopPropagation();
+            {sortedExpenses.map((item) => {
+              const isSelected = selectedIds.has(item.id);
+              return (
+                <article
+                  key={item.id}
+                  className={`expense-ledger-item ${isSelected ? 'selected' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (isDeleting) return;
+                    if (isSelectionMode) {
+                      toggleSelectExpense({ stopPropagation: () => {} } as React.MouseEvent, item.id);
+                    } else {
                       onEditExpense(item);
-                    }}
-                    title="Edit transaction"
-                    aria-label={`Edit ${item.category} transaction`}
-                  >
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ledger-action delete"
-                    disabled={isDeleting && expensePendingDelete?.id === item.id}
-                    onClick={(e) => handleRequestDelete(e, item)}
-                    title="Delete transaction"
-                    aria-label={`Delete ${item.category} transaction`}
-                  >
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                  </button>
-                </div>
-              </article>
-            ))}
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (isSelectionMode) {
+                        toggleSelectExpense({ stopPropagation: () => {} } as React.MouseEvent, item.id);
+                      } else {
+                        onEditExpense(item);
+                      }
+                    }
+                  }}
+                  aria-label={`Edit ${item.category} expense: ₹${formatPaiseToRupees(item.amountInPaise)}, ${item.date}`}
+                >
+                  {/* Selection Mode Checkbox (Stage 13) */}
+                  {isSelectionMode && (
+                    <div
+                      className="expense-select-checkbox-container"
+                      onClick={(e) => toggleSelectExpense(e, item.id)}
+                    >
+                      <input
+                        type="checkbox"
+                        className="expense-row-checkbox"
+                        checked={isSelected}
+                        onChange={() => {}} // Controlled by container click
+                        aria-label={`Select ${item.category} transaction`}
+                      />
+                    </div>
+                  )}
+
+                  <div className={`expense-icon-box ${getCategoryIconClass(item.category)}`}>
+                    {renderCategoryIcon(item.category)}
+                  </div>
+
+                  <div className="expense-details">
+                    <div className="expense-primary-info">
+                      <span className="expense-category" title={item.category}>{item.category}</span>
+                      <span className="expense-amount">
+                        -₹{formatPaiseToRupees(item.amountInPaise)}
+                      </span>
+                    </div>
+                    <div className="expense-secondary-info">
+                      <span className="expense-meta" title={`${item.date} • ${item.paymentMethod}`}>
+                        {item.date} &bull; {item.paymentMethod}
+                      </span>
+                      {item.note && <span className="expense-note" title={item.note}>{item.note}</span>}
+                    </div>
+                  </div>
+
+                  {!isSelectionMode && (
+                    <div className="expense-ledger-actions">
+                      <button
+                        type="button"
+                        className="btn-ledger-action edit"
+                        disabled={isDeleting}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isDeleting) onEditExpense(item);
+                        }}
+                        title="Edit transaction"
+                        aria-label={`Edit ${item.category} transaction`}
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ledger-action delete"
+                        disabled={isDeleting}
+                        onClick={(e) => handleRequestDelete(e, item)}
+                        title="Delete transaction"
+                        aria-label={`Delete ${item.category} transaction`}
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
 
-      {/* Delete Confirmation Modal */}
+      {/* Single Delete Confirmation Modal */}
       {expensePendingDelete && (
         <div
           className="modal-backdrop"
@@ -530,6 +757,80 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                 disabled={isDeleting}
               >
                 {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal (Stage 13) */}
+      {showBulkDeleteConfirm && (
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            if (!isDeleting) setShowBulkDeleteConfirm(false);
+          }}
+          role="presentation"
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bulk-delete-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <h3 id="bulk-delete-modal-title" className="modal-title">
+                  Delete {selectedIds.size} Transactions?
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => {
+                  if (!isDeleting) setShowBulkDeleteConfirm(false);
+                }}
+                aria-label="Close dialog"
+                disabled={isDeleting}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="modal-desc">
+              Are you sure you want to permanently delete{' '}
+              <strong style={{ color: '#f8fafc' }}>{selectedIds.size} selected transactions</strong>{' '}
+              totaling{' '}
+              <strong style={{ color: '#f8fafc' }}>₹{formatPaiseToRupees(selectedSpendingPaise)}</strong>?
+              This action cannot be undone.
+            </p>
+
+            {deleteError && (
+              <p className="modal-error-text" role="alert">
+                {deleteError}
+              </p>
+            )}
+
+            <div className="modal-actions-row">
+              <button
+                type="button"
+                className="btn-modal-cancel"
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-modal-delete"
+                onClick={handleConfirmBulkDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : `Yes, Delete ${selectedIds.size} Records`}
               </button>
             </div>
           </div>

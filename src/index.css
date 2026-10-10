@@ -4890,3 +4890,367 @@ textarea {
 .backup-count-item strong {
   color: #f8fafc;
 }
+
+/* ==========================================================================
+   STAGE 11, 12, 13: ADVANCED INSIGHTS, BUDGETS & TRANSACTION WORKSPACE
+   ========================================================================== */
+
+/* Stage 13: Expenses Workspace Controls & Search */
+.btn-expenses-select-mode {
+  padding: 6px 14px;
+  min-height: 36px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #f8fafc;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+}
+
+.btn-expenses-select-mode.active {
+  background: #059669;
+  border-color: #34d399;
+  color: #ffffff;
+}
+
+.bulk-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  background: rgba(5, 150, 105, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 12px;
+  animation: slideDown 0.2s ease;
+}
+
+.bulk-selection-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-bulk-select-all {
+  padding: 6px 12px;
+  min-height: 34px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bulk-selected-count {
+  font-size: 0.8rem;
+  color: #e2e8f0;
+}
+
+.bulk-selected-count strong {
+  color: #34d399;
+}
+
+.btn-bulk-delete {
+  padding: 8px 14px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.1s ease;
+}
+
+.btn-bulk-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.expenses-search-group {
+  margin-bottom: 10px;
+}
+
+.expenses-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0 12px;
+  transition: border-color 0.15s ease;
+}
+
+.expenses-search-wrapper:focus-within {
+  border-color: #34d399;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.expenses-search-wrapper svg {
+  color: #94a3b8;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.expenses-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 10px 0;
+  font-size: 16px; /* Guaranteed iOS Safari auto-zoom prevention */
+  color: #f8fafc;
+  outline: none;
+  font-family: inherit;
+}
+
+.expenses-search-input::placeholder {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.btn-search-clear {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.expenses-filters-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.expense-ledger-item.selected {
+  background: rgba(5, 150, 105, 0.15);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.expense-select-checkbox-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 6px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.expense-row-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: #059669;
+  cursor: pointer;
+}
+
+/* Stage 11: Financial Insights & Visual Velocity Trends */
+.insights-cockpit-card {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px;
+  margin-top: 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.insights-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.insights-card-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trend-bars-container {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  align-items: flex-end;
+  height: 110px;
+  padding-top: 16px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.trend-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.trend-bar-fill-track {
+  width: 100%;
+  max-width: 28px;
+  height: 72px;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+}
+
+.trend-bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #34d399 0%, #059669 100%);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+
+.trend-bar-fill.current {
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+}
+
+.trend-bar-month {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+.trend-bar-month.current {
+  color: #38bdf8;
+  font-weight: 800;
+}
+
+.trend-bar-amount {
+  font-size: 0.65rem;
+  color: #cbd5e1;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+/* Unusual Spending Alert Banner */
+.unusual-spending-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 12px;
+}
+
+.unusual-icon {
+  color: #f59e0b;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.unusual-content {
+  flex: 1;
+}
+
+.unusual-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.unusual-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.unusual-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fef3c7;
+}
+
+.unusual-reason {
+  font-size: 0.74rem;
+  color: #e2e8f0;
+  line-height: 1.35;
+}
+
+/* Stage 12: Smart Budget Status Pills & Category Cards */
+.budget-status-pill.success {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.budget-status-pill.warning {
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.budget-status-pill.danger {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.category-budget-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  transition: all 0.15s ease;
+}
+
+.category-budget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.category-budget-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-budget-limits {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 6px;
+}
+
+.category-budget-remaining.positive {
+  color: #34d399;
+  font-weight: 700;
+}
+
+.category-budget-remaining.negative {
+  color: #f87171;
+  font-weight: 700;
+}

@@ -1,12 +1,19 @@
 import React, { useMemo } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Expense, MonthData } from '../types';
 import { MonthSelector } from './MonthSelector';
+import { expenseRepository } from '../repositories/expenseRepository';
+import { financialSettingsRepository } from '../repositories/financialSettingsRepository';
 import {
   formatPaiseToRupees,
   sumExpenses,
-  calculateCategorySpending,
   calculateBudgetMetrics,
+  getPreviousMonthId,
 } from '../utils/finance';
+import {
+  analyzeCategoryBudgets,
+  calculateMonthlyBudgetComparison,
+} from '../utils/budgets';
 
 export interface BudgetsViewProps {
   months: MonthData[];
@@ -67,13 +74,35 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
     statusPill,
   } = budgetMetrics;
 
+  // Previous month data for MoM budget comparisons (Stage 12)
+  const previousMonthId = useMemo(() => getPreviousMonthId(selectedMonthId), [selectedMonthId]);
+  const prevSettings = useLiveQuery(
+    () => financialSettingsRepository.getMonthlySettings(previousMonthId),
+    [previousMonthId]
+  );
+  const prevExpenses = useLiveQuery(
+    () => expenseRepository.getExpensesByMonth(previousMonthId),
+    [previousMonthId]
+  ) ?? [];
+
+  const budgetComparison = useMemo(() => {
+    return calculateMonthlyBudgetComparison(
+      monthlyBudgetPaise,
+      prevSettings?.budgetInPaise ?? null,
+      expenses,
+      prevExpenses
+    );
+  }, [monthlyBudgetPaise, prevSettings, expenses, prevExpenses]);
+
   // Net Cashflow
   const netCashflowPaise =
     monthlyIncomePaise !== null ? monthlyIncomePaise - totalSpendingPaise : null;
   const isNegativeCashflow = netCashflowPaise !== null && netCashflowPaise < 0;
 
-  // Category breakdown
-  const categorySpending = useMemo(() => calculateCategorySpending(expenses), [expenses]);
+  // Stage 12 Category Budget Analysis
+  const categoryAnalysis = useMemo(() => {
+    return analyzeCategoryBudgets(expenses, {});
+  }, [expenses]);
 
   const currentMonthData = useMemo(() => {
     const found = months.find((m) => m.id === selectedMonthId);
@@ -89,11 +118,11 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
         onSelectMonth={onSelectMonth}
       />
 
-      {/* Main Budget Hero Card */}
+      {/* Main Budget Control Hero Card */}
       <section className="budget-hero-card">
         <div className="budget-hero-header">
           <div className="budget-hero-title-group">
-            <span className="budget-hero-tag">Monthly Budget</span>
+            <span className="budget-hero-tag">Monthly Budget Control</span>
             <span className="budget-month-label">{currentMonthData.label}</span>
           </div>
           <button
@@ -153,6 +182,17 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                 </span>
               </div>
             </div>
+
+            {/* Stage 12: Previous Month Comparison Context */}
+            {budgetComparison.previousBudgetPaise !== null && (
+              <div className="budget-mom-context-row" style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', color: '#94a3b8' }}>
+                <span>Previous Month Target: ₹{formatPaiseToRupees(budgetComparison.previousBudgetPaise)}</span>
+                <span>
+                  Budget {budgetComparison.budgetChangePaise && budgetComparison.budgetChangePaise >= 0 ? '+' : ''}
+                  ₹{formatPaiseToRupees(budgetComparison.budgetChangePaise ?? 0)}
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="budget-hero-empty">
@@ -229,16 +269,16 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
         </div>
       </section>
 
-      {/* Category Spending Breakdown Section */}
+      {/* Category Spending Breakdown Section (Stage 12 Guardrails) */}
       <section className="budget-category-section">
         <div className="category-section-header">
           <h3 className="section-title">Category Spending Distribution</h3>
           <span className="category-count-badge">
-            {categorySpending.length} {categorySpending.length === 1 ? 'category' : 'categories'}
+            {categoryAnalysis.length} {categoryAnalysis.length === 1 ? 'category' : 'categories'}
           </span>
         </div>
 
-        {categorySpending.length === 0 ? (
+        {categoryAnalysis.length === 0 ? (
           <div className="category-empty-card">
             <p className="category-empty-text">No expenses recorded for this month.</p>
             <button
@@ -251,7 +291,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
           </div>
         ) : (
           <div className="category-breakdown-list">
-            {categorySpending.map((item) => (
+            {categoryAnalysis.map((item) => (
               <div key={item.category} className="category-progress-item">
                 <div className="category-progress-header">
                   <div className="category-item-label">
@@ -259,14 +299,20 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                     <span className="category-name" title={item.category}>{item.category}</span>
                   </div>
                   <div className="category-item-values">
-                    <span className="category-amount">₹{formatPaiseToRupees(item.totalPaise)}</span>
-                    <span className="category-percent">{item.percentage}%</span>
+                    <span className="category-amount">₹{formatPaiseToRupees(item.spentPaise)}</span>
+                    <span className="category-percent">
+                      {totalSpendingPaise > 0
+                        ? `${Math.round((item.spentPaise / totalSpendingPaise) * 100)}%`
+                        : '0%'}
+                    </span>
                   </div>
                 </div>
                 <div className="category-bar-track">
                   <div
                     className={`category-bar-fill ${getCategoryIconClass(item.category)}`}
-                    style={{ width: `${Math.min(100, Math.max(2, item.percentage))}%` }}
+                    style={{
+                      width: `${totalSpendingPaise > 0 ? Math.min(100, Math.max(2, (item.spentPaise / totalSpendingPaise) * 100)) : 0}%`,
+                    }}
                   />
                 </div>
               </div>
