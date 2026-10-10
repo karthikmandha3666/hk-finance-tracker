@@ -73,6 +73,19 @@ export function exportExpensesToCsv(expenses: Expense[]): string {
 }
 
 /**
+ * Filters expenses by a given month ID ('YYYY-MM') and generates an RFC-4180 CSV export.
+ */
+export function exportMonthExpensesToCsv(expenses: Expense[], monthId: string): { csv: string; filename: string; count: number } {
+  const monthExpenses = expenses.filter((e) => e.date && e.date.startsWith(monthId));
+  const csv = exportExpensesToCsv(monthExpenses);
+  return {
+    csv,
+    filename: `spendly-expenses-${monthId}.csv`,
+    count: monthExpenses.length,
+  };
+}
+
+/**
  * Initiates a browser file download of CSV content.
  */
 export function downloadCsvFile(csvContent: string, filename?: string): void {

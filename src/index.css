@@ -4015,6 +4015,34 @@ textarea {
   outline-offset: 2px;
 }
 
+.btn-expenses-export-month {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #10b981;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
+.btn-expenses-export-month:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.55);
+  transform: translateY(-1px);
+}
+
+.btn-expenses-export-month:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .expenses-hero-meta {
   display: flex;
   align-items: center;

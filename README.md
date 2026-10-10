@@ -117,10 +117,13 @@ Spendly is local-first, meaning you have 100% control and ownership of your fina
 - **Restore from Backup**: Validates the JSON file structure, schema version, and records, prompts with a summary of records to be restored, and performs an atomic database update.
 
 ### 2. Export Expenses to CSV (Excel)
-- Generates a clean, RFC-4180 compliant CSV file of all your expense records.
-- Includes UTF-8 Byte Order Mark (`\uFEFF`) so Indian Rupee characters and special notes display properly when opened in **Microsoft Excel**, **Google Sheets**, or **Apple Numbers**.
-- Preserves exact integer paise accuracy converted to two-decimal rupees.
-- Columns: `Date`, `Amount (INR)`, `Category`, `Payment Method`, `Note`.
+- **All Expenses Export**: In **Settings → Data & Backup**, export your entire financial history across all months with a single click (`spendly-expenses-YYYY-MM-DD.csv`).
+- **Selected Month Export**:
+  - Export a specific month from **Settings → Data & Backup** using the monthly export selector.
+  - Or tap the **Export CSV** button directly on the **Expenses ledger screen** (`ExpensesView`) to download the active month (`spendly-expenses-YYYY-MM.csv`).
+- **Spreadsheet Compatibility**: Includes UTF-8 Byte Order Mark (`\uFEFF`) and RFC-4180 escaping so Indian Rupee characters and multi-line notes display properly when opened in **Microsoft Excel**, **Google Sheets**, or **Apple Numbers**.
+- **Monetary Precision**: Preserves exact integer paise accuracy converted to two-decimal rupees without floating-point rounding drift.
+- **Columns**: `Date`, `Amount (INR)`, `Category`, `Payment Method`, `Note`.
 
 ### 3. Import Expenses from CSV
 - Easily import historical expenses from other apps or bank spreadsheets.

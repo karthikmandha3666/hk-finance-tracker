@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Category, PaymentMethod } from '../types';
 import { categoryRepository } from '../repositories/categoryRepository';
@@ -15,6 +15,7 @@ import {
 } from '../utils/backup';
 import {
   exportExpensesToCsv,
+  exportMonthExpensesToCsv,
   downloadCsvFile,
   parseExpensesCsv,
   detectDuplicateExpenses,
@@ -81,6 +82,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const activeLoans = useLiveQuery(() => loanRepository.getActiveLoans()) ?? [];
   const allExpenses = useLiveQuery(() => db.expenses.toArray()) ?? [];
 
+  // Available unique months from all expenses
+  const availableExportMonths = useMemo(() => {
+    const monthMap = new Map<string, number>();
+    for (const exp of allExpenses) {
+      if (exp.date && exp.date.length >= 7) {
+        const m = exp.date.slice(0, 7);
+        monthMap.set(m, (monthMap.get(m) ?? 0) + 1);
+      }
+    }
+    return Array.from(monthMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([mId, count]) => {
+        const [year, month] = mId.split('-');
+        const dateObj = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1);
+        const label = dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        return { id: mId, label, count };
+      });
+  }, [allExpenses]);
+
+  const [selectedExportMonth, setSelectedExportMonth] = useState<string>('');
+
+  useEffect(() => {
+    if (availableExportMonths.length > 0 && (!selectedExportMonth || !availableExportMonths.some((m) => m.id === selectedExportMonth))) {
+      setSelectedExportMonth(availableExportMonths[0].id);
+    }
+  }, [availableExportMonths, selectedExportMonth]);
+
   // Handlers for CSV Export & Import (Stage 10)
   const handleExportCsv = async () => {
     setIsExportingCsv(true);
@@ -93,6 +121,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     } catch (err) {
       console.error('CSV export failed:', err);
       setBackupErrorMsg('Failed to export expenses to CSV. Please try again.');
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
+
+  const handleExportSelectedMonthCsv = async () => {
+    if (!selectedExportMonth || isExportingCsv) return;
+    setIsExportingCsv(true);
+    setBackupErrorMsg(null);
+    try {
+      const { csv, filename, count } = exportMonthExpensesToCsv(allExpenses, selectedExportMonth);
+      downloadCsvFile(csv, filename);
+      setBackupSuccessMsg(`Exported ${count} expenses for ${selectedExportMonth} to CSV successfully.`);
+      setTimeout(() => setBackupSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('CSV month export failed:', err);
+      setBackupErrorMsg('Failed to export monthly expenses to CSV.');
     } finally {
       setIsExportingCsv(false);
     }
@@ -787,22 +832,67 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <h4 className="backup-card-title">Export to CSV (Excel)</h4>
               </div>
               <p className="backup-card-desc">
-                Export all your expenses into a spreadsheet-ready CSV file formatted with UTF-8 BOM so it opens directly in Microsoft Excel, Google Sheets, or Apple Numbers.
+                Export all expenses or a selected month into a spreadsheet-ready CSV file formatted with UTF-8 BOM so it opens directly in Microsoft Excel, Google Sheets, or Apple Numbers.
               </p>
-              <button
-                type="button"
-                className="btn-backup-action"
-                onClick={handleExportCsv}
-                disabled={isExportingCsv}
-                style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', color: '#ffffff' }}
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                <span>{isExportingCsv ? 'Exporting CSV...' : `Export ${allExpenses.length} Expenses to CSV`}</span>
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn-backup-action"
+                  onClick={handleExportCsv}
+                  disabled={isExportingCsv || allExpenses.length === 0}
+                  style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)', color: '#ffffff' }}
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span>{isExportingCsv ? 'Exporting CSV...' : `Export All Expenses (${allExpenses.length})`}</span>
+                </button>
+
+                {availableExportMonths.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <select
+                      className="filter-select"
+                      style={{
+                        flex: 1,
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        color: '#f8fafc',
+                        fontSize: '0.82rem',
+                        minHeight: '44px',
+                      }}
+                      value={selectedExportMonth}
+                      onChange={(e) => setSelectedExportMonth(e.target.value)}
+                      aria-label="Select month to export"
+                    >
+                      {availableExportMonths.map((m) => (
+                        <option key={m.id} value={m.id} style={{ background: '#0f172a', color: '#f8fafc' }}>
+                          {m.label} ({m.count} {m.count === 1 ? 'expense' : 'expenses'})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-backup-action"
+                      onClick={handleExportSelectedMonthCsv}
+                      disabled={isExportingCsv || !selectedExportMonth}
+                      style={{
+                        flex: 'none',
+                        background: 'rgba(16, 185, 129, 0.16)',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        color: '#10b981',
+                        padding: '10px 14px',
+                        minHeight: '44px',
+                      }}
+                    >
+                      Export Month
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* CSV Import Card (Stage 10) */}

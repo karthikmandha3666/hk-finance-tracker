@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import {
   escapeCsvField,
   exportExpensesToCsv,
+  exportMonthExpensesToCsv,
   parseRawCsvLines,
   parseExpensesCsv,
   detectDuplicateExpenses,
@@ -75,6 +76,58 @@ describe('Stage 10: CSV Expense Export & Import Utilities', () => {
       const csv = exportExpensesToCsv(mockExpenses);
       expect(csv).toContain('2026-10-01,250.50,Food,UPI,"Groceries, fruits"');
       expect(csv).toContain('2026-10-02,1000.00,Bills,Net Banking,"Internet ""Fiber"" bill"');
+    });
+
+    it('exports expenses for a selected month specifically and generates accurate filename and count', () => {
+      const mockExpenses: Expense[] = [
+        {
+          id: '1',
+          amountInPaise: 10000,
+          category: 'Food',
+          paymentMethod: 'UPI',
+          date: '2026-09-28',
+          note: 'September dinner',
+          currency: 'INR',
+          createdAt: '2026-09-28T10:00:00.000Z',
+          updatedAt: '2026-09-28T10:00:00.000Z',
+        },
+        {
+          id: '2',
+          amountInPaise: 20000,
+          category: 'Groceries',
+          paymentMethod: 'Card',
+          date: '2026-10-05',
+          note: 'October market',
+          currency: 'INR',
+          createdAt: '2026-10-05T10:00:00.000Z',
+          updatedAt: '2026-10-05T10:00:00.000Z',
+        },
+        {
+          id: '3',
+          amountInPaise: 30000,
+          category: 'Fuel',
+          paymentMethod: 'Cash',
+          date: '2026-10-12',
+          note: 'October petrol',
+          currency: 'INR',
+          createdAt: '2026-10-12T10:00:00.000Z',
+          updatedAt: '2026-10-12T10:00:00.000Z',
+        },
+      ];
+
+      // Export for October 2026
+      const octExport = exportMonthExpensesToCsv(mockExpenses, '2026-10');
+      expect(octExport.filename).toBe('spendly-expenses-2026-10.csv');
+      expect(octExport.count).toBe(2);
+      expect(octExport.csv).toContain('October market');
+      expect(octExport.csv).toContain('October petrol');
+      expect(octExport.csv).not.toContain('September dinner');
+
+      // Export for a month with 0 records
+      const novExport = exportMonthExpensesToCsv(mockExpenses, '2026-11');
+      expect(novExport.filename).toBe('spendly-expenses-2026-11.csv');
+      expect(novExport.count).toBe(0);
+      expect(novExport.csv.split('\r\n').length).toBe(1); // Header only
     });
   });
 

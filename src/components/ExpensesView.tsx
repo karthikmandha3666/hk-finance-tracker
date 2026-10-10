@@ -6,6 +6,7 @@ import { expenseRepository } from '../repositories/expenseRepository';
 import { categoryRepository, sortCategoryNamesDeterministic } from '../repositories/categoryRepository';
 import { paymentMethodRepository } from '../repositories/paymentMethodRepository';
 import { formatPaiseToRupees, sumExpenses } from '../utils/finance';
+import { exportExpensesToCsv, downloadCsvFile } from '../utils/csv';
 
 export interface ExpensesViewProps {
   months: MonthData[];
@@ -197,6 +198,12 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
   const hasActiveFilters = Boolean(selectedCategoryFilter || selectedMethodFilter);
 
+  const handleExportMonthCsv = () => {
+    if (expenses.length === 0) return;
+    const csvContent = exportExpensesToCsv(expenses);
+    downloadCsvFile(csvContent, `spendly-expenses-${selectedMonthId}.csv`);
+  };
+
   return (
     <div className="expenses-view-container">
       {/* Month Selector */}
@@ -216,18 +223,35 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               <span>{formatPaiseToRupees(totalMonthSpendingPaise)}</span>
             </div>
           </div>
-          <button
-            type="button"
-            className="btn-expenses-add-hero"
-            onClick={onAddExpenseClick}
-            aria-label="Add new expense"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>Add Expense</span>
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="btn-expenses-export-month"
+              onClick={handleExportMonthCsv}
+              disabled={expenses.length === 0}
+              title={`Export ${currentMonthData.shortLabel} expenses to CSV`}
+              aria-label={`Export ${currentMonthData.shortLabel} expenses to CSV`}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>Export CSV</span>
+            </button>
+            <button
+              type="button"
+              className="btn-expenses-add-hero"
+              onClick={onAddExpenseClick}
+              aria-label="Add new expense"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Add Expense</span>
+            </button>
+          </div>
         </div>
 
         <div className="expenses-hero-meta">

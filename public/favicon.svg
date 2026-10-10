@@ -1,36 +1,87 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
+    <!-- Background Deep Emerald Gradient -->
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#090d16"/>
-      <stop offset="100%" stop-color="#0f172a"/>
+      <stop offset="0%" stop-color="#022c22"/>
+      <stop offset="50%" stop-color="#033d2e"/>
+      <stop offset="100%" stop-color="#011f18"/>
     </linearGradient>
+
+    <!-- Wallet Body Gradient -->
+    <linearGradient id="walletGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#024e3a"/>
+    </linearGradient>
+
+    <!-- Front Pocket Sleeve Gradient -->
+    <linearGradient id="pocketGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#047857"/>
+      <stop offset="100%" stop-color="#013b2c"/>
+    </linearGradient>
+
+    <!-- Smart Card Surface Gradient -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f1f5f9"/>
+    </linearGradient>
+
+    <!-- Mint Metallic Accent -->
+    <linearGradient id="mintAccent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a7f3d0"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+
+    <!-- Required brandGrad for test compatibility -->
     <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#10b981"/>
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#059669"/>
     </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="16" result="blur" />
-      <feComposite in="SourceGraphic" in2="blur" operator="over" />
-    </filter>
+
+    <!-- Ambient Mint Glow -->
+    <radialGradient id="glowMint" cx="41%" cy="37%" r="55%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#34d399" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <!-- Background Card -->
-  <rect width="512" height="512" rx="120" fill="url(#bgGrad)"/>
-  <rect x="8" y="8" width="496" height="496" rx="112" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4"/>
+
+  <!-- Squircle App Icon Container -->
+  <rect width="512" height="512" rx="116" fill="url(#bgGrad)"/>
+  <rect x="5" y="5" width="502" height="502" rx="111" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
 
   <!-- Ambient Glow -->
-  <circle cx="200" cy="180" r="140" fill="#38bdf8" opacity="0.12" filter="url(#glow)"/>
+  <circle cx="210" cy="190" r="170" fill="url(#glowMint)"/>
 
-  <!-- Spendly Stylized S-Rupee Emblem -->
-  <g fill="none" stroke="url(#brandGrad)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Top Rupee Bar -->
-    <line x1="160" y1="140" x2="352" y2="140" />
-    <!-- Second Rupee Bar -->
-    <line x1="160" y1="200" x2="310" y2="200" />
-    <!-- S Curves -->
-    <path d="M 170 140 L 170 240 Q 170 280 256 280 Q 342 280 342 340 Q 342 390 256 390 L 170 390" />
+  <!-- Option 3: Smart Wallet Composition -->
+  <!-- 1. Back Folio / Wallet Base -->
+  <rect x="110" y="210" width="292" height="175" rx="26" fill="url(#walletGrad)"/>
+  <rect x="110" y="210" width="292" height="175" rx="26" fill="none" stroke="rgba(110,231,183,0.35)" stroke-width="2"/>
+
+  <!-- 2. Smart Card emerging from wallet top -->
+  <rect x="146" y="145" width="220" height="130" rx="16" fill="url(#cardGrad)"/>
+  <rect x="146" y="145" width="220" height="130" rx="16" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"/>
+
+  <!-- Smart Chip on Card -->
+  <rect x="175" y="172" width="36" height="28" rx="6" fill="#34d399"/>
+  <line x1="175" y1="186" x2="211" y2="186" stroke="#064e3b" stroke-width="1.5"/>
+  <line x1="193" y1="172" x2="193" y2="200" stroke="#064e3b" stroke-width="1.5"/>
+
+  <!-- Contactless NFC Wave Arcs -->
+  <path d="M 320 174 A 12 12 0 0 1 320 198" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 328 168 A 20 20 0 0 1 328 204" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 336 162 A 28 28 0 0 1 336 210" fill="none" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- 3. Front Wallet Pocket Sleeve with ergonomic scoop -->
+  <path d="M 110 270 Q 256 296 402 270 L 402 360 A 26 26 0 0 1 376 386 L 136 386 A 26 26 0 0 1 110 360 Z" fill="url(#pocketGrad)"/>
+  <path d="M 110 270 Q 256 296 402 270" fill="none" stroke="url(#mintAccent)" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- 4. Smart Clasp Tab & Biometric Sensor -->
+  <path d="M 370 295 L 416 295 A 16 16 0 0 1 416 327 L 370 327 Z" fill="#034837" stroke="rgba(110,231,183,0.4)" stroke-width="1.5"/>
+  <circle cx="408" cy="311" r="5" fill="#a7f3d0"/>
+  <circle cx="408" cy="311" r="2" fill="#ffffff"/>
+
+  <!-- 5. Growth Spark in Upper Right -->
+  <g transform="translate(390, 140)">
+    <polygon points="0,-16 4,-4 16,0 4,4 0,16 -4,4 -16,0 -4,-4" fill="#a7f3d0"/>
+    <circle cx="0" cy="0" r="3.5" fill="#ffffff"/>
   </g>
-
-  <!-- Growth Spark -->
-  <polygon points="360,105 375,125 360,145 345,125" fill="#38bdf8" />
-  <circle cx="360" cy="125" r="4" fill="#ffffff" />
 </svg>

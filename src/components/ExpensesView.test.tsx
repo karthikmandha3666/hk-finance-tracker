@@ -417,4 +417,42 @@ describe('ExpensesView filter visibility and clearing behavior (DEF-04)', () => 
     expect(updatedSelect.value).toBe('');
     expect(container.querySelector('.active-filters-banner')).toBeNull();
   });
+
+  it('renders Export CSV button for the current month and handles empty vs populated state', async () => {
+    // 1. Render with 0 expenses: Export CSV button should be disabled
+    await act(async () => {
+      root.render(
+        <ExpensesView
+          months={mockMonths}
+          selectedMonthId="2026-10"
+          onSelectMonth={vi.fn()}
+          expenses={[]}
+          onAddExpenseClick={vi.fn()}
+          onEditExpense={vi.fn()}
+        />
+      );
+    });
+
+    const exportBtnEmpty = container.querySelector('.btn-expenses-export-month') as HTMLButtonElement;
+    expect(exportBtnEmpty).not.toBeNull();
+    expect(exportBtnEmpty.disabled).toBe(true);
+
+    // 2. Render with expenses: Export CSV button is enabled
+    await act(async () => {
+      root.render(
+        <ExpensesView
+          months={mockMonths}
+          selectedMonthId="2026-10"
+          onSelectMonth={vi.fn()}
+          expenses={multipleExpenses}
+          onAddExpenseClick={vi.fn()}
+          onEditExpense={vi.fn()}
+        />
+      );
+    });
+
+    const exportBtnPopulated = container.querySelector('.btn-expenses-export-month') as HTMLButtonElement;
+    expect(exportBtnPopulated).not.toBeNull();
+    expect(exportBtnPopulated.disabled).toBe(false);
+  });
 });
