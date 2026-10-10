@@ -12,12 +12,14 @@
 ## 1. Executive Release Summary
 
 - **Release Status:** **RELEASED (v1.0.0)**
-- **Release Commit:** Pending staging and commit in Phase J
+- **Release Commit:** `f8363df8022a5427951ca45b719f615de77b45e2`
+- **Release Tag:** `v1.0.0` (annotated, verified pointing to `f8363df`)
+- **GitHub Actions Run:** ID `38083072184` (Status: `completed`, Conclusion: `success`)
 - **Test Suite Results:** **22 passed test suites (177 tests passed, 0 failures, 100% success)**
 - **Build Result:** **Exit Code 0 (Success)** via `tsc -b && vite build`
 - **Git Diff & Whitespace Audit:** Clean (`git diff --check` passed with exit code 0)
 - **Deployment Pipeline:** GitHub Actions (`deploy.yml`) on `main` branch with `npm ci`, `npm test`, `npm run build`, and Pages deployment
-- **Live URL:** `https://karthikmandha3666.github.io/hk-finance-tracker/`
+- **Live URL:** `https://karthikmandha3666.github.io/hk-finance-tracker/` (Verified HTTP 200, PWA precache active)
 
 ---
 
